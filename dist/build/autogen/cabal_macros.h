@@ -63,3 +63,17 @@
   (major1) == 0 && (major2) <  4 || \
   (major1) == 0 && (major2) == 4 && (minor) <= 1)
 
+/* package QuickCheck-2.7.3 */
+#define VERSION_QuickCheck "2.7.3"
+#define MIN_VERSION_QuickCheck(major1,major2,minor) (\
+  (major1) <  2 || \
+  (major1) == 2 && (major2) <  7 || \
+  (major1) == 2 && (major2) == 7 && (minor) <= 3)
+
+/* package hspec-1.9.5 */
+#define VERSION_hspec "1.9.5"
+#define MIN_VERSION_hspec(major1,major2,minor) (\
+  (major1) <  1 || \
+  (major1) == 1 && (major2) <  9 || \
+  (major1) == 1 && (major2) == 9 && (minor) <= 5)
+

@@ -1,4 +1,4 @@
-module SuffixArray (suffixarray) where
+module SuffixArray  where
 
 foobarbaz :: String
 foobarbaz = "foobarbaz"
