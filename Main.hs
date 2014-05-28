@@ -4,5 +4,5 @@ import SuffixArray
 
 main :: IO ()
 main = do
-    putStrLn foobarbaz
+    putStrLn $ toBurrowsWheeler "nonsense" '$'
 
