@@ -1,1 +1,4 @@
+dist/
+.cabal*
+cabal*
 .DS_Store
