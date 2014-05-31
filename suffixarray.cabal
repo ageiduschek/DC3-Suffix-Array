@@ -24,6 +24,7 @@ library
    ,random
    ,SHA2
    ,unix-compat
+   ,array
   
   default-language: Haskell2010
   ghc-options: -Wall
