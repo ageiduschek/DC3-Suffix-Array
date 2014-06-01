@@ -83,6 +83,19 @@ getOverallMin st leftMinIndex rightMinIndex = do
 twoToThe :: Int -> Int
 twoToThe k = 2 ^ k
 
+createKArray :: Int -> IO (IOArray Index Int)
+createKArray arrayLength = do
+    arr <- newArray (0, arrayLength - 1) 0
+    createKArray' arr 1 arrayLength 0 0
+
+createKArray' :: (IOArray Index Int) -> Index -> Index -> Int -> Int -> IO (IOArray Index Int)
+createKArray' arr i len k numRepeats
+    | i == len = return arr
+    | otherwise = do
+        let (k', numRepeats') = if numRepeats == (twoToThe k) then (k + 1, 0) else (k, numRepeats + 1)
+        writeArray arr i k' 
+        createKArray' arr (i + 1) len k' numRepeats'
+
 {-
     private int powerOfTwo(int k) {
         return 1 << k;
