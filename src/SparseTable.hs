@@ -1,16 +1,20 @@
 module SparseTable (SparseTable, sparseTableRMQ) where
 
 import Utility
+import Data.Array.IO
 
-type SparseTable = Index -> Index -> Index
+type SparseTable = Index -> Index -> IO Index
 
-data ST = ST {} 
+data ST = ST { kArray :: IOArray Index Int   -- Maybe make this an IOArray?
+                , sparseTable :: IOArray Index (IOArray Index Index)  
+                , elems :: IOArray Index Int
+            }  
 
     --private int [] kArray; //Array of length n+1
     --private int [][] sparseTable;
     --private float [] elems;
 
-sparseTableRMQ :: [Int] -> SparseTable
+sparseTableRMQ :: [Int] -> IO SparseTable
 sparseTableRMQ a = undefined
 
 {-
@@ -44,8 +48,24 @@ sparseTableRMQ a = undefined
     }
 -}
 
-rmq :: ST -> Index -> Index -> Index
-rmq st = undefined
+rmq :: ST -> Index -> Index -> IO Index
+rmq st i  j = do
+    let range = j - i + 1
+    k <- (kArray st) !-! range
+    let rangeLength = twoToThe k
+    let (range1Start, range2Start)= (i, j - rangeLength + 1)
+    leftMinIndex <- (sparseTable st) !-!-! (range1Start, k)
+    rightMinIndex <- (sparseTable st) !-!-! (range2Start, k)
+    getOverallMin st leftMinIndex rightMinIndex
+
+
+getOverallMin :: ST -> Index -> Index -> IO Index
+getOverallMin st leftMinIndex rightMinIndex = do
+    leftValue <- (elems st) !-! leftMinIndex
+    rightValue <- (elems st) !-! rightMinIndex
+    return $ if leftValue < rightValue then leftMinIndex else rightMinIndex
+
+
 {-
     public int rmq(int i, int j) {
         int range = j - i + 1;
@@ -59,6 +79,10 @@ rmq st = undefined
         return elems[leftMinIndex] < elems[rightMinIndex] ? leftMinIndex : rightMinIndex;
     }
 -}
+
+twoToThe :: Int -> Int
+twoToThe k = 2 ^ k
+
 {-
     private int powerOfTwo(int k) {
         return 1 << k;

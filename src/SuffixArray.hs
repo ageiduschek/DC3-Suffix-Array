@@ -257,9 +257,10 @@ fromBurrowsWheeler :: String -> Char -> String
 fromBurrowsWheeler str eof = undefined
 
 -- Longest common extension. Array of indices must match number of strings in GeneralizedSuffixArray
-lce :: GeneralizedSuffixArray -> [Index] -> Int
-lce sa indices = if length indices /= numInputStrs sa 
+lce :: GeneralizedSuffixArray -> [Index] -> IO Int
+lce sa indices = do
+    if length indices /= numInputStrs sa 
                     then error "must provide same number of indices as there are in the GeneralizedSuffixArray" 
                     else (genLcpRMQ sa) (minimum addresses) (maximum addresses)
-        where 
-            addresses = map (strIndexToOverallIndex sa) (zip [0..] indices)
+    where 
+        addresses = map (strIndexToOverallIndex sa) (zip [0..] indices)

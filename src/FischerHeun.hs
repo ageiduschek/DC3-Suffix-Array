@@ -3,7 +3,7 @@ module FischerHeun (FischerHeun, fischerHeunRMQ) where
 import Utility
 import SparseTable
 
-type FischerHeun = Index -> Index -> Index
+type FischerHeun = Index -> Index -> IO Index
 
 data FH = FH {} 
     --private float [] elems;
@@ -26,8 +26,8 @@ fischerHeunRMQ a = undefined
     }
 -}
 
-rmq :: FH -> Index -> Index -> Index
-rmq fh = undefined
+rmq :: FH -> Index -> Index -> IO Index
+rmq fh i j = undefined
 {-
     public int rmq(int i, int j) {
         int startBlock = blockNum(i);
