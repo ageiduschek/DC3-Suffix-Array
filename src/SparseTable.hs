@@ -6,7 +6,7 @@ import Data.Array.IO
 type SparseTable = Index -> Index -> IO Index
 
 data ST = ST { kArray :: IOArray Index Int   -- Maybe make this an IOArray?
-                , sparseTable :: IOArray Index (IOArray Index Index)  
+                , sparseTable :: IOArray (Index, Index) Int 
                 , elems :: IOArray Index Int
             }  
 
@@ -15,7 +15,30 @@ data ST = ST { kArray :: IOArray Index Int   -- Maybe make this an IOArray?
     --private float [] elems;
 
 sparseTableRMQ :: [Int] -> IO SparseTable
-sparseTableRMQ a = undefined
+sparseTableRMQ a = do
+    let elemsLength = length a
+    kArr <- createKArray elemsLength
+    maxK <- kArr !-! elemsLength
+    st <- new2DArray elemsLength (maxK + 1) 0
+    elements <- (newListArray (0, elemsLength -1) a)
+
+    loopOuter st (0, maxK + 1) (\i -> (0, elemsLength - (twoToThe i) + 1)) (\st' (k, startIndex) -> do
+            if k == 0
+                then
+                    st' !-!-!= (startIndex, k, startIndex) 
+                else do
+                    let prevRangeLength = twoToThe (k-1)
+                    let (range1Start, range2Start) = (startIndex, prevRangeLength)
+
+                    leftMinIndex <- st' !-!-! (range1Start, k-1)
+                    rightMinIndex <- st' !-!-! (range2Start, k-1)
+                    overallMinIndex <- getOverallMin elements leftMinIndex rightMinIndex
+                    st' !-!-!= (startIndex, k, overallMinIndex)
+                    return () 
+
+        )
+    return $ rmq $ ST {kArray=kArr, sparseTable = st, elems = elements}
+
 
 {-
     public SparseTableRMQ(float[] elems) {
@@ -28,8 +51,8 @@ sparseTableRMQ a = undefined
         sparseTable = new int [elems.length][maxK + 1];
 
         for(int k = 0; k < maxK + 1; k++){
-            int rangeLength = powerOfTwo(k);
             for (int startIndex=0; startIndex < elems.length - rangeLength + 1; startIndex++) {
+                int rangeLength = powerOfTwo(k);
                 if(k == 0){
                     sparseTable[startIndex][k] = startIndex;
                 } else {
@@ -50,19 +73,19 @@ sparseTableRMQ a = undefined
 
 rmq :: ST -> Index -> Index -> IO Index
 rmq st i  j = do
-    let range = j - i + 1
-    k <- (kArray st) !-! range
+    let r = j - i + 1
+    k <- (kArray st) !-! r
     let rangeLength = twoToThe k
     let (range1Start, range2Start)= (i, j - rangeLength + 1)
     leftMinIndex <- (sparseTable st) !-!-! (range1Start, k)
     rightMinIndex <- (sparseTable st) !-!-! (range2Start, k)
-    getOverallMin st leftMinIndex rightMinIndex
+    getOverallMin (elems st) leftMinIndex rightMinIndex
 
 
-getOverallMin :: ST -> Index -> Index -> IO Index
-getOverallMin st leftMinIndex rightMinIndex = do
-    leftValue <- (elems st) !-! leftMinIndex
-    rightValue <- (elems st) !-! rightMinIndex
+getOverallMin :: IOArray Index Int -> Index -> Index -> IO Index
+getOverallMin elements leftMinIndex rightMinIndex = do
+    leftValue <- elements !-! leftMinIndex
+    rightValue <- elements !-! rightMinIndex
     return $ if leftValue < rightValue then leftMinIndex else rightMinIndex
 
 
