@@ -108,8 +108,8 @@ twoToThe k = 2 ^ k
 
 createKArray :: Int -> IO (IOArray Index Int)
 createKArray arrayLength = do
-    arr <- newArray (0, arrayLength - 1) 0
-    createKArray' arr 1 arrayLength 0 0
+    arr <- newArray (0, arrayLength) 0
+    createKArray' arr 1 (arrayLength + 1) 0 0
 
 createKArray' :: (IOArray Index Int) -> Index -> Index -> Int -> Int -> IO (IOArray Index Int)
 createKArray' arr i len k numRepeats
