@@ -48,7 +48,12 @@ fischerHeunRMQ a = do
 -}
 
 getFHBlockSize :: Int -> Int
-getFHBlockSize len = undefined
+getFHBlockSize len = 1 + (quot logBase2OfLen 4)
+    where 
+        float2 = (fromIntegral (2::Int)) :: Double
+        floatLen = fromIntegral len :: Double
+        xxx = (logBase float2 floatLen)
+        logBase2OfLen = truncate xxx
 
     --private int getFHBlockSize(float [] elems) {
     --    return (int)((Math.log(elems.length)/Math.log(2))/4 + 1);
@@ -115,7 +120,7 @@ createOrAssignBlockSummaries a aLength blockMinVals blockSTs blockSigs bSize i b
                     let block = take blockEndIndex a 
                     st <- sparseTableRMQ block
                     writeArray blockSTs blockRMQKey (Just st)
-            blockMinIndex <- getBlockMinIndex blockSTs blockSigs i 0 (aLength - 1)
+            blockMinIndex <- getBlockMinIndex' blockSTs blockSigs 0 (aLength - 1) bSize i
             writeArray blockMinVals i $ a !! blockMinIndex
             let a' = drop blockEndIndex a 
             createOrAssignBlockSummaries a' (aLength - blockEndIndex) blockMinVals blockSTs blockSigs bSize (i + 1) bound
@@ -130,7 +135,41 @@ numTotalBlocks elemsLength bSize = quot (elemsLength + bSize - 1) bSize
 
 
 rmq :: FH -> Index -> Index -> IO Index
-rmq fh i j = undefined
+rmq fh i j = do
+    let a = elems fh
+    let bSize = blockSize fh
+    let (startBlock, endBlock) = (quot i bSize, quot j bSize)
+    let (blockSigs, blockSTs) = (blockSignatures fh, blockSparseTables fh)
+    let fGetBlockMinIndex = getBlockMinIndex blockSTs blockSigs i j bSize
+    startMinIndex <- fGetBlockMinIndex startBlock
+    endMinIndex <- fGetBlockMinIndex endBlock 
+
+    startMinVal <- readArray a startMinIndex
+    endMinVal <- readArray a endMinIndex
+
+    let minIndex = if startMinVal < endMinVal then startMinIndex else endMinIndex
+    if endBlock - startBlock <= 1
+        then return minIndex
+        else do
+            middleMinBlockNum <- (summarySparseTable fh) (startBlock + 1) (endBlock - 1)
+            blockSig <- readArray blockSigs middleMinBlockNum
+
+            let blockStartIndex = middleMinBlockNum * bSize
+            let startIndex = max blockStartIndex i
+            let endIndex = min (blockStartIndex + bSize  - 1) j
+
+            maybeMiddleBlockSTRMQ <- readArray blockSTs blockSig
+            case maybeMiddleBlockSTRMQ of 
+                Nothing -> error "YOU DONE FUCKED UP"
+                Just middleBlockSTRMQ -> do
+                    relativeMinIndex <- middleBlockSTRMQ (startIndex - blockStartIndex) (endIndex - blockStartIndex)
+                    let middleMinIndex = blockStartIndex + relativeMinIndex
+                    minValA <- readArray a minIndex
+                    minValB <- readArray a middleMinIndex
+                    if minValA < minValB then return minIndex else return middleMinIndex
+
+
+
 {-
     public int rmq(int i, int j) {
         int startBlock = blockNum(i);
@@ -167,9 +206,18 @@ rmq fh i j = undefined
     }
 -}
 
-getBlockMinIndex :: IOArray Index (Maybe SparseTable) -> IOArray BlockNum Index -> Int -> Index -> Index -> IO Int
-getBlockMinIndex blockSTs blockSigs blockNum minIndex maxIndex = undefined
-
+getBlockMinIndex :: IOArray Index (Maybe SparseTable) -> IOArray BlockNum Index -> Int -> Index -> Index -> Int -> IO Int
+getBlockMinIndex blockSTs blockSigs minIndex maxIndex bSize blockNum = do
+    let blockStartIndex = blockNum * bSize
+    let startIndex = max blockStartIndex minIndex
+    let endIndex = min (blockStartIndex + bSize  - 1) maxIndex
+    blockSig <- readArray blockSigs blockNum
+    maybeBlockST <- readArray blockSTs blockSig
+    case maybeBlockST of 
+        Nothing -> error "BEN. THERE'S A BUG."
+        Just blockST -> do
+            indexOfMin <- blockST (startIndex - blockStartIndex) (endIndex - blockStartIndex)
+            return $ blockStartIndex + indexOfMin
 
 
 {-
@@ -184,7 +232,17 @@ getBlockMinIndex blockSTs blockSigs blockNum minIndex maxIndex = undefined
     }
 -}
 
-
+-- | This one assumes that the block is the first block in the input - TODO: Generalize these two
+getBlockMinIndex' :: IOArray Index (Maybe SparseTable) -> IOArray BlockNum Index -> Int -> Index -> Index -> Int -> IO Int
+getBlockMinIndex' blockSTs blockSigs minIndex maxIndex bSize blockNum = do
+    let blockStartIndex = blockNum * bSize
+    let startIndex = max blockStartIndex minIndex
+    let endIndex = min (blockStartIndex + bSize  - 1) maxIndex
+    blockSig <- readArray blockSigs blockNum
+    maybeBlockST <- readArray blockSTs blockSig
+    case maybeBlockST of 
+        Nothing -> error "BEN. THERE'S A BUG."
+        Just blockST -> do blockST (startIndex - blockStartIndex) (endIndex - blockStartIndex)
 
 generateRMQKey :: [Int] -> [Int] -> Int -> Index -> Index -> Index -> Int
 generateRMQKey a ctStack bitVector bitIndex i bound 
@@ -201,7 +259,7 @@ generateRMQKey a ctStack bitVector bitIndex i bound
 popBitStack :: [Int] -> Int -> Index -> ([Int], Int)
 popBitStack [] _ bitIndex = ([], bitIndex)
 popBitStack ctStack@(x:xs) elems_i bitIndex
-    | head ctStack <= elems_i = (ctStack, bitIndex)
+    | x <= elems_i = (ctStack, bitIndex)
     | otherwise = popBitStack xs elems_i (bitIndex + 1) 
 
 
