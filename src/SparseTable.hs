@@ -28,7 +28,7 @@ sparseTableRMQ a = do
                     st' !-!-!= (startIndex, k, startIndex) 
                 else do
                     let prevRangeLength = twoToThe (k-1)
-                    let (range1Start, range2Start) = (startIndex, prevRangeLength)
+                    let (range1Start, range2Start) = (startIndex, startIndex + prevRangeLength)
 
                     leftMinIndex <- st' !-!-! (range1Start, k-1)
                     rightMinIndex <- st' !-!-! (range2Start, k-1)
@@ -39,37 +39,31 @@ sparseTableRMQ a = do
         )
     return $ rmq $ ST {kArray=kArr, sparseTable = st, elems = elements}
 
+-- FOR TESTING ONLY
+--getSparseTable :: [Int] -> IO ST
+--getSparseTable a = do
+--    let elemsLength = length a
+--    kArr <- createKArray elemsLength
+--    maxK <- kArr !-! elemsLength
+--    st <- new2DArray elemsLength (maxK + 1) 0
+--    elements <- (newListArray (0, elemsLength -1) a)
 
-{-
-    public SparseTableRMQ(float[] elems) {
-        this.elems = elems;
+--    loopOuter st (0, maxK + 1) (\i -> (0, elemsLength - (twoToThe i) + 1)) (\st' (k, startIndex) -> do
+--            if k == 0
+--                then
+--                    st' !-!-!= (startIndex, k, startIndex) 
+--                else do
+--                    let prevRangeLength = twoToThe (k-1)
+--                    let (range1Start, range2Start) = (startIndex, startIndex + prevRangeLength)
 
-        kArray = createKArray(elems.length);
-        
-        int maxK = kArray[elems.length];
-        
-        sparseTable = new int [elems.length][maxK + 1];
+--                    leftMinIndex <- st' !-!-! (range1Start, k-1)
+--                    rightMinIndex <- st' !-!-! (range2Start, k-1)
+--                    overallMinIndex <- getOverallMin elements leftMinIndex rightMinIndex
+--                    st' !-!-!= (startIndex, k, overallMinIndex)
+--                    return () 
 
-        for(int k = 0; k < maxK + 1; k++){
-            for (int startIndex=0; startIndex < elems.length - rangeLength + 1; startIndex++) {
-                int rangeLength = powerOfTwo(k);
-                if(k == 0){
-                    sparseTable[startIndex][k] = startIndex;
-                } else {
-                    int prevRangeLength = powerOfTwo(k-1);
-                    int range1Start = startIndex;
-                    int range2Start = startIndex + prevRangeLength;
-
-                    int leftMinIndex = sparseTable[range1Start][k-1];
-                    int rightMinIndex = sparseTable[range2Start][k-1];
-                    int overallMinIndex = elems[leftMinIndex] < elems[rightMinIndex] ? leftMinIndex : rightMinIndex;
-                    sparseTable[startIndex][k] = overallMinIndex;
-                }
-                
-            }
-        }
-    }
--}
+--        )
+--    return $ ST {kArray=kArr, sparseTable = st, elems = elements}
 
 rmq :: ST -> Index -> Index -> IO Index
 rmq st i  j = do
@@ -88,21 +82,6 @@ getOverallMin elements leftMinIndex rightMinIndex = do
     rightValue <- elements !-! rightMinIndex
     return $ if leftValue < rightValue then leftMinIndex else rightMinIndex
 
-
-{-
-    public int rmq(int i, int j) {
-        int range = j - i + 1;
-        int k = kArray[range];
-        int rangeLength = powerOfTwo(k); //2^k
-        int range1Start = i;
-        int range2Start = j - rangeLength + 1;
-
-        int leftMinIndex = sparseTable[range1Start][k];
-        int rightMinIndex = sparseTable[range2Start][k];
-        return elems[leftMinIndex] < elems[rightMinIndex] ? leftMinIndex : rightMinIndex;
-    }
--}
-
 twoToThe :: Int -> Int
 twoToThe k = 2 ^ k
 
@@ -115,30 +94,6 @@ createKArray' :: (IOArray Index Int) -> Index -> Index -> Int -> Int -> IO (IOAr
 createKArray' arr i len k numRepeats
     | i == len = return arr
     | otherwise = do
-        let (k', numRepeats') = if numRepeats == (twoToThe k) then (k + 1, 0) else (k, numRepeats + 1)
+        let (k', numRepeats') = if numRepeats == (twoToThe k) then (k + 1, 1) else (k, numRepeats + 1)
         writeArray arr i k' 
         createKArray' arr (i + 1) len k' numRepeats'
-
-{-
-    private int powerOfTwo(int k) {
-        return 1 << k;
-    }
-
-    private int[] createKArray(int arrayLength) {
-        int[] kArray = new int[arrayLength + 1];
-
-        int k = 0;
-        int numRepeats = 0;
-        for (int i=1; i < arrayLength + 1; i++){
-            if(numRepeats == powerOfTwo(k)) {
-                k++;
-                numRepeats = 0;
-            } 
-            kArray[i] = k;
-            numRepeats++;
-        }
-
-        return kArray;
-
-    }
--}

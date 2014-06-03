@@ -59,8 +59,12 @@ Anna Geiduschek and Ben Isaacs
 <div id="our-api" class="slide section level1">
 <h1>Our API</h1>
 <ul>
-<li><pre class="sourceCode haskell"><code class="sourceCode haskell">undefined<span class="ot"> ::</span> a
-error<span class="ot"> ::</span> <span class="dt">String</span> <span class="ot">-&gt;</span> a</code></pre></li>
+<li><p>Fischer-Heun RMQ</p>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">type</span> <span class="dt">FischerHeun</span> <span class="fu">=</span> <span class="dt">Index</span> <span class="ot">-&gt;</span> <span class="dt">Index</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">Index</span>
+<span class="ot">fischerHeunRMQ ::</span> [<span class="dt">Int</span>] <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">FischerHeun</span></code></pre></li>
+<li><p>Sparse Table RMQ</p>
+<pre class="sourceCode haskell"><code class="sourceCode haskell"><span class="kw">type</span> <span class="dt">SparseTable</span> <span class="fu">=</span> <span class="dt">Index</span> <span class="ot">-&gt;</span> <span class="dt">Index</span> <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">Index</span>
+<span class="ot">sparseTableRMQ ::</span> [<span class="dt">Int</span>] <span class="ot">-&gt;</span> <span class="dt">IO</span> <span class="dt">SparseTable</span></code></pre></li>
 </ul>
 </div>
 </body>
