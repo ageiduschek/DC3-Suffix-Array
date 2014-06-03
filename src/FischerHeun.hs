@@ -2,10 +2,18 @@ module FischerHeun (FischerHeun, fischerHeunRMQ) where
 
 import Utility
 import SparseTable
+import Data.Array.IO
+import Data.Bits
 
 type FischerHeun = Index -> Index -> IO Index
+type BlockNum = Index
 
-data FH = FH {} 
+data FH = FH { elems :: IOArray Index Int, 
+            blockSize :: Int, 
+            summarySparseTable :: SparseTable,
+            blockSparseTables :: IOArray Index (Maybe SparseTable),
+            blockSignatures :: IOArray BlockNum Index
+        } 
     --private float [] elems;
     --private int blockSize;
     
@@ -14,7 +22,20 @@ data FH = FH {}
     --private Map<Integer, Integer> blockSignatures;
 
 fischerHeunRMQ :: [Int] -> IO FischerHeun
-fischerHeunRMQ a = undefined
+fischerHeunRMQ a = do
+    let elemsLength = length a
+    elms <- newListArray (0, elemsLength - 1) a
+    let bSize = getFHBlockSize elemsLength
+    (blockMinVals, blockSTs, blockSigs) <- createBlockSummaries a elemsLength bSize
+    summaryST <- sparseTableRMQ blockMinVals
+    return $ rmq $ FH {elems = elms
+                        , blockSize = bSize
+                        , summarySparseTable = summaryST 
+                        , blockSparseTables = blockSTs
+                        , blockSignatures = blockSigs
+                    }
+
+
 
 {-
     public FischerHeunRMQ(float[] elems) {
@@ -25,6 +46,88 @@ fischerHeunRMQ a = undefined
         summarySparseTable = new SparseTableRMQ(blockMinValues); 
     }
 -}
+
+getFHBlockSize :: Int -> Int
+getFHBlockSize len = undefined
+
+    --private int getFHBlockSize(float [] elems) {
+    --    return (int)((Math.log(elems.length)/Math.log(2))/4 + 1);
+    --}
+
+createBlockSummaries :: [Int] -> Int -> Int -> IO ([Int], IOArray Index (Maybe SparseTable), IOArray BlockNum Index)
+createBlockSummaries a elemsLength bSize = do
+    let numBlocks = numTotalBlocks elemsLength bSize
+    blockMinVals <- newArray_ (0, numBlocks - 1)
+    blockSTs <- newArray (0, (numDifferentSTs bSize)) Nothing
+    blockSigs <- newArray_ (0, numBlocks) 
+    createOrAssignBlockSummaries a elemsLength blockMinVals blockSTs blockSigs bSize 0 numBlocks
+    blockMinValsArr <- getElems blockMinVals
+    return (blockMinValsArr, blockSTs, blockSigs)
+
+numDifferentSTs :: Int -> Int
+numDifferentSTs bSize = 4 ^ bSize
+
+
+
+    --private float [] createBlockSummaries(float [] elems){
+    --    float [] blockMinValues  = new float[numTotalBlocks()];
+    --    blockSparseTables = new SparseTableRMQ [(int)Math.pow(4, getFHBlockSize(elems))];
+    --    blockSignatures = new HashMap<Integer, Integer>();
+
+    --    //Loop runs n/b times
+    --    for(int i = 0; i < blockMinValues.length; i++){
+
+
+    --        int blockStartIndex = i * blockSize;
+
+    --        //O(b)
+    --        int blockRMQKey = generateRMQKey(elems, blockStartIndex);
+    --        blockSignatures.put(i, blockRMQKey);
+
+    --        //This happens at most 4^b times
+    --        if(blockSparseTables[blockRMQKey] == null){               
+    --            //O(b)
+    --            float [] block = Arrays.copyOfRange(elems, blockStartIndex, Math.min(blockStartIndex + blockSize, elems.length));
+
+    --            //O(blog(b))
+    --            blockSparseTables[blockRMQKey] = new SparseTableRMQ(block);
+    --        }
+
+    --        int blockMinIndex = getBlockMinIndex(i, 0, elems.length - 1);
+    --        blockMinValues[i] = elems[blockMinIndex];
+
+    --    }
+    --    return blockMinValues;
+    --}
+
+
+createOrAssignBlockSummaries :: [Int] -> Int -> IOArray Index Int -> IOArray Index (Maybe SparseTable) -> IOArray BlockNum Index -> Int -> Index -> Index -> IO ()
+createOrAssignBlockSummaries a aLength blockMinVals blockSTs blockSigs bSize i bound
+        | i == bound = do return ()
+        | otherwise = do
+            let blockEndIndex = min aLength $ bSize
+            let blockRMQKey = generateRMQKey a [] 0 0 0 blockEndIndex
+            writeArray blockSigs i blockRMQKey
+            currST <- readArray blockSTs blockRMQKey
+            case currST of 
+                Just _ -> return ()  
+                Nothing -> do
+                    let block = take blockEndIndex a 
+                    st <- sparseTableRMQ block
+                    writeArray blockSTs blockRMQKey (Just st)
+            blockMinIndex <- getBlockMinIndex blockSTs blockSigs i 0 (aLength - 1)
+            writeArray blockMinVals i $ a !! blockMinIndex
+            let a' = drop blockEndIndex a 
+            createOrAssignBlockSummaries a' (aLength - blockEndIndex) blockMinVals blockSTs blockSigs bSize (i + 1) bound
+
+
+numTotalBlocks :: Int -> Int -> Int
+numTotalBlocks elemsLength bSize = quot (elemsLength + bSize - 1) bSize 
+
+--private int numTotalBlocks(){
+--    return (elems.length + blockSize - 1)/blockSize;
+--}
+
 
 rmq :: FH -> Index -> Index -> IO Index
 rmq fh i j = undefined
@@ -58,12 +161,18 @@ rmq fh i j = undefined
         }
         return min;
     }
--}
-{-
+
     private int blockNum(int index) {
         return index/blockSize;
     }
+-}
 
+getBlockMinIndex :: IOArray Index (Maybe SparseTable) -> IOArray BlockNum Index -> Int -> Index -> Index -> IO Int
+getBlockMinIndex blockSTs blockSigs blockNum minIndex maxIndex = undefined
+
+
+
+{-
     private int getBlockMinIndex(int blockNum, int minIndex, int maxIndex) {
         int blockStartIndex = blockNum * blockSize;
         int startIndex = Math.max(blockStartIndex, minIndex);
@@ -73,42 +182,30 @@ rmq fh i j = undefined
         SparseTableRMQ blockSparseTable = blockSparseTables[blockSignature];
         return blockStartIndex + blockSparseTable.rmq(startIndex - blockStartIndex, endIndex - blockStartIndex);
     }
-
-    private int numTotalBlocks(){
-        return (elems.length + blockSize - 1)/blockSize;
-    }
-
-    private float [] createBlockSummaries(float [] elems){
-        float [] blockMinValues  = new float[numTotalBlocks()];
-        blockSparseTables = new SparseTableRMQ [(int)Math.pow(4, getFHBlockSize(elems))];
-        blockSignatures = new HashMap<Integer, Integer>();
-
-        //Loop runs n/b times
-        for(int i = 0; i < blockMinValues.length; i++){
+-}
 
 
-            int blockStartIndex = i * blockSize;
 
-            //O(b)
-            int blockRMQKey = generateRMQKey(elems, blockStartIndex);
-            blockSignatures.put(i, blockRMQKey);
+generateRMQKey :: [Int] -> [Int] -> Int -> Index -> Index -> Index -> Int
+generateRMQKey a ctStack bitVector bitIndex i bound 
+    | i == bound = bitVector
+    | otherwise = generateRMQKey a' ctStack' bitVector' bitIndex' (i + 1) bound
+        where
+            a_i = head a
+            (a', bitIndex') = popBitStack ctStack a_i bitIndex
+            ctStack' = a_i:ctStack
+            bitVector' = setBit bitVector bitIndex' 
 
-            //This happens at most 4^b times
-            if(blockSparseTables[blockRMQKey] == null){               
-                //O(b)
-                float [] block = Arrays.copyOfRange(elems, blockStartIndex, Math.min(blockStartIndex + blockSize, elems.length));
 
-                //O(blog(b))
-                blockSparseTables[blockRMQKey] = new SparseTableRMQ(block);
-            }
 
-            int blockMinIndex = getBlockMinIndex(i, 0, elems.length - 1);
-            blockMinValues[i] = elems[blockMinIndex];
+popBitStack :: [Int] -> Int -> Index -> ([Int], Int)
+popBitStack [] _ bitIndex = ([], bitIndex)
+popBitStack ctStack@(x:xs) elems_i bitIndex
+    | head ctStack <= elems_i = (ctStack, bitIndex)
+    | otherwise = popBitStack xs elems_i (bitIndex + 1) 
 
-        }
-        return blockMinValues;
-    }
 
+{-
     private int generateRMQKey(float [] elems, int blockStartIndex) {
         BitSet bitSet = new BitSet(Integer.SIZE);
         Stack<Float> cartesianTreeStack = new Stack<Float>();
@@ -128,19 +225,6 @@ rmq fh i j = undefined
         return bitSetToInt(bitSet);
     }
 
-    private int bitSetToInt(BitSet bitSet)
-    {
-        int bitInteger = 0;
-        for(int i = 0 ; i < Integer.SIZE; i++)
-            if(bitSet.get(i)) {
-                bitInteger |= (1 << i);   
-            }
 
-        return bitInteger;
-    }
-
-    private int getFHBlockSize(float [] elems) {
-        return (int)((Math.log(elems.length)/Math.log(2))/4 + 1);
-    }
 -}
 
