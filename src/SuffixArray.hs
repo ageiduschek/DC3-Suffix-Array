@@ -354,9 +354,11 @@ getT0TokensHelper revStr revStrLen revUnsortedRanks tokens =
 
 radixSort :: [StrChar] -> Int -> Int -> Int -> IO [Index]
 radixSort tokens tokenSize alphabetSize numEOFs = do
+    --putStrLn $ "Entering radixSort"
+    --putStrLn $ "tokens: " ++ (show tokens)
     let tokensLen = length tokens
     ioTokens <- newListArray (0, tokensLen - 1)tokens
-    radixSortHelper ioTokens tokenSize tokensLen alphabetSize numEOFs 0 Nothing
+    radixSortHelper ioTokens tokenSize tokensLen alphabetSize numEOFs (tokenSize - 1) Nothing
 
  
 radixSortHelper :: IOArray Index StrChar -> Int -> Int -> Int -> Int -> Int -> Maybe [Index] -> IO [Index]
@@ -367,6 +369,7 @@ radixSortHelper tokens tokenSize tokensLen alphabetSize numEOFs rnd maybePartial
                             Just x -> x
         return $ sortedIndices
     | otherwise = do
+        --putStrLn $ "round " ++ (show rnd)
         buckets <- newArray (-1, numEOFs + alphabetSize - 1) []
         fillBuckets tokens tokenSize tokensLen buckets numEOFs rnd maybePartiallySortedIndices
         sortedIndices <- emptyBuckets buckets alphabetSize numEOFs
