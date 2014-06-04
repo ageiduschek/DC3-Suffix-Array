@@ -66,8 +66,8 @@ createGeneralizedSuffixArray strs = do
     sa <- strToSuffixArray str' (length str') initialAlphabetSize (length inputStrings)
     let arr = map toIndividualStrAddr sa
 
-    let lCP = genLCPInfo arr inputStrings
-    lCPRMQ <- fischerHeunRMQ lCP
+    let lCP = undefined --genLCPInfo arr inputStrings
+    lCPRMQ <- return undefined --fischerHeunRMQ lCP
     return $ GeneralizedSuffixArrayConstructor {  inputStrs = inputStrings 
                                                 , genOrderedSuffix = arr 
                                                 , numInputStrs = length inputStrings
@@ -572,9 +572,13 @@ lCPInfo indices inputString = do
     pos <- newListArray (0, len - 1) indices
     rank <- newArray_ (0, len - 1)
     loadRankArray pos rank 0 len
+    rankList <- getElems rank --TODO: DELETE
+    putStrLn $ "rankList" ++ (show rankList)
     inputStrArray <- newListArray (0, (length inputString) - 1) inputString
     height <- newArray_ (0, len - 1)
     loopOverRankArray pos rank height inputStrArray 0 len 0
+    heightList <- getElems height
+    putStrLn $ "heightList" ++ (show heightList)
     getElems height
 
 -- Helper for lCPInfo
@@ -608,6 +612,7 @@ loadRankArray pos rank i end
         | otherwise = do 
             val <- readArray pos i
             writeArray rank val i
+            loadRankArray pos rank (i + 1) end
 
 genLCPInfo :: GeneralizedSuffixRankings -> [[StrChar]] -> LCPInfo
 --genLCPInfo indices inputStrs = undefined
