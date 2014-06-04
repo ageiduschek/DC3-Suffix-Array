@@ -11,8 +11,8 @@ type StrNum = Index
 
 type LCPInfo = [Length]
 
-data SuffixRankings = SuffixRankings [Index] 
-data GeneralizedSuffixRankings = GeneralizedSuffixRankings [(StrNum, Index)]
+type SuffixRankings = [Index] 
+type GeneralizedSuffixRankings = [(StrNum, Index)]
 
 
 data StrChar = ActualChar Char | PseudoEOF Index deriving Show
@@ -51,10 +51,10 @@ createSuffixArray :: String -> IO SuffixArray
 createSuffixArray str = do
     let str' = appendEOF str 0
     sa <- strToSuffixArray str' (length str') initialAlphabetSize 1
-    let arr =  SuffixRankings sa
-    let lcp = lCPInfo arr str'
+    lcp <- lCPInfo sa str'
+
     lcpRMQ <- fischerHeunRMQ lcp
-    return $ SuffixArrayConstructor {inputStr = str', orderedSuffixes = arr, lcp = lcp, lcpRMQ = lcpRMQ}
+    return $ SuffixArrayConstructor {inputStr = str', orderedSuffixes = sa, lcp = lcp, lcpRMQ = lcpRMQ}
 
 
 -- Creates a generalized suffix array out of a list of strings
@@ -64,7 +64,8 @@ createGeneralizedSuffixArray strs = do
     let (toIndividualStrAddr, toOverallAddr) = getToFromGeneralMaps inputStrs
     let str' = (concat inputStrs)
     sa <- strToSuffixArray str' (length str') initialAlphabetSize (length inputStrs)
-    let arr =  GeneralizedSuffixRankings $ map toIndividualStrAddr sa
+    let arr = map toIndividualStrAddr sa
+
     let lcp = genLCPInfo arr inputStrs
     lcpRMQ <- fischerHeunRMQ lcp
     return $ GeneralizedSuffixArrayConstructor {  inputStrs = inputStrs 
@@ -546,8 +547,49 @@ getToFromGeneralMaps strs = (toIndividualStrAddr, toOverallAddr)
 
 
 -- The following two functions will need to implement the algorithm in http://www.cs.iastate.edu/~cs548/references/linear_lcp.pdf
-lCPInfo :: SuffixRankings -> [StrChar] ->LCPInfo
-lCPInfo indices inputStr = undefined
+lCPInfo :: SuffixRankings -> [StrChar] -> IO LCPInfo
+lCPInfo indices inputStr = do
+    let len = length indices
+    pos <- newListArray (0, len - 1) indices
+    rank <- newArray_ (0, len - 1)
+    loadRankArray pos rank 0 len
+    inputStrArray <- newListArray (0, (length inputStr) - 1) inputStr
+    height <- newArray_ (0, len - 1)
+    loopOverRankArray pos rank height inputStrArray 0 len 0
+    getElems height
+
+-- Helper for lCPInfo
+loopOverRankArray :: IOArray Index Index -> IOArray Index Index -> IOArray Index Int -> IOArray Index StrChar -> Index -> Index -> Int -> IO ()
+loopOverRankArray pos rank height string i end h 
+        | i == end = return ()
+        | otherwise =
+          do rankI <- readArray rank i
+             if rankI > 1 then do
+                k <- readArray pos (rankI - 1)
+                h' <- incrementH string i k 0
+                writeArray height rankI h'
+                let h'' = if h' > 0 then h' - 1 else h'
+                loopOverRankArray pos rank height string (succ i) end h''
+             else loopOverRankArray pos rank height string (succ i) end h
+             
+
+-- Helper for lCPInfo
+incrementH :: IOArray Index StrChar -> Index -> Index -> Int -> IO Int
+incrementH string i k h = do
+    stringIPlusH <- readArray string (i + h)
+    stringKPlusH <- readArray string (k + h)
+    if stringIPlusH == stringKPlusH then do
+        incrementH string i k (succ h)
+    else do
+        return h
+
+-- Helper for lCPInfo
+loadRankArray :: IOArray Index Index -> IOArray Index Index -> Index -> Index -> IO ()
+loadRankArray pos rank i end 
+        | i == end = return ()
+        | otherwise = do 
+            val <- readArray pos i
+            writeArray rank val i
 
 genLCPInfo :: GeneralizedSuffixRankings -> [[StrChar]] -> LCPInfo
 genLCPInfo indices inputStrs = undefined
