@@ -1,4 +1,4 @@
-module NaiveAlgorithms (rmq) where
+module NaiveAlgorithms (naiveRMQ) where
 
 import Utility
 
@@ -19,8 +19,8 @@ int rmq (list, start, end) {
 }
 -}
 
-rmq :: [Int] -> Index -> Index -> Index
-rmq xs start end | end < start = -1
+naiveRMQ :: [Int] -> Index -> Index -> Index
+naiveRMQ xs start end | end < start = -1
 				 | otherwise   = minimumOverRange xs start (start + 1) end
 
 minimumOverRange :: [Int] -> Index -> Index -> Index -> Index
