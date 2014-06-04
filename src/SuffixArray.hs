@@ -85,6 +85,8 @@ strToSuffixArray str strlen alphabetSize numEOFs = do
     t0Order <- getT0Ordering str strlen alphabetSize numEOFs unsortedRanks
     mergeT0WithRest str strlen t0Order t1t2Order unsortedRanks
 
+--strToSuffixArray str strlen alphabetSize numEOFs = return $ [8, 7, 4, 0, 5, 2, 1, 6, 3] -- Suffix array for "nonsense"
+
 getT1AndT2Ordering :: [StrChar] -> Int -> Int -> Int -> IO [Index]
 getT1AndT2Ordering str strlen alphabetSize numEOFs = do
     let (doubledInput, doubledInputLen) = shiftAndDouble str strlen
@@ -606,10 +608,14 @@ toBurrowsWheeler str eof = do
 suffixArrayToBurrowsWheeler :: [Index] -> IOArray Index StrChar -> Char -> IO String
 suffixArrayToBurrowsWheeler [] _ _ = return ""
 suffixArrayToBurrowsWheeler sa ioStr eof = do
-    strChar <- readArray ioStr $ (head sa) - 1
-    let ch  = case strChar of 
-                PseudoEOF _ -> eof
-                ActualChar c -> c
+    let i = (head sa) - 1
+    ch <- if i < 0 
+            then return eof
+            else do
+                strChar <- readArray ioStr i
+                case strChar of 
+                    ActualChar c -> return c
+                    _ -> error "SuffixArray should have only one 0"
     bwtRest <- suffixArrayToBurrowsWheeler (tail sa) ioStr eof
     return $ ch:bwtRest
 
