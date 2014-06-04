@@ -80,6 +80,9 @@ createGeneralizedSuffixArray strs = do
 strToSuffixArray :: [StrChar] -> Int -> Int -> Int -> IO [Index]
 strToSuffixArray [_] _ _ _ = do return [0]
 strToSuffixArray str strlen alphabetSize numEOFs = do
+    --putStrLn $ "In strToSuffixArray. "
+    --putStrLn $ "str: " ++ (show str)
+    --putStrLn $ "strlen: " ++ (show strlen)
     t1t2Order <- getT1AndT2Ordering str strlen alphabetSize numEOFs
     unsortedRanks <- unsort t1t2Order strlen
     t0Order <- getT0Ordering str strlen alphabetSize numEOFs unsortedRanks
@@ -89,12 +92,22 @@ strToSuffixArray str strlen alphabetSize numEOFs = do
 
 getT1AndT2Ordering :: [StrChar] -> Int -> Int -> Int -> IO [Index]
 getT1AndT2Ordering str strlen alphabetSize numEOFs = do
+    --putStrLn $ "Entering call to getT1AndT2Ordering"
     let (doubledInput, doubledInputLen) = shiftAndDouble str strlen
+    --putStrLn $ "doubledInput = " ++ show doubledInput
+    --putStrLn $ "doubledInputLen = " ++ show doubledInputLen
     tokenOrderWithRepeats <- radixSort doubledInput 3 alphabetSize numEOFs
-    (indicesWithRepeatsRemoved, newAlphabetSize) <- indicesWithoutRepeats doubledInput doubledInputLen tokenOrderWithRepeats 
+    --putStrLn $ "tokenOrderWithRepeats = " ++ show tokenOrderWithRepeats
+    (indicesWithRepeatsRemoved, newAlphabetSize) <- indicesWithoutRepeats doubledInput doubledInputLen tokenOrderWithRepeats
+    --putStrLn $ "indicesWithRepeatsRemoved = " ++ show indicesWithRepeatsRemoved
+    --putStrLn $ "newAlphabetSize = " ++ show newAlphabetSize
     tokensInNewAlphabet <- translateToNewAlphabet tokenOrderWithRepeats indicesWithRepeatsRemoved
-    twoThirdsSuffixArray <- strToSuffixArray tokensInNewAlphabet doubledInputLen newAlphabetSize newAlphabetSize
+    --putStrLn $ "tokensInNewAlphabet = " ++ show tokensInNewAlphabet
+    twoThirdsSuffixArray <- strToSuffixArray tokensInNewAlphabet (length tokensInNewAlphabet) newAlphabetSize newAlphabetSize
+    --putStrLn $ "Returned from recursive call"
     return $ mapDoubledArrayTokensToMaster twoThirdsSuffixArray
+
+--getT1AndT2Ordering str strlen alphabetSize numEOFs = return $ [8, 7, 4, 5, 2, 1]
 
 {-
     private int[] getT1AndT2Ordering(int[] input, int alphabetSize){
@@ -124,7 +137,7 @@ shiftAndDouble input len = (shiftedAndDoubledStr, newStringLen)
         (firstHalfPads, secondHalfPads) = (padsNeeded (len - 1), padsNeeded (len - 2))
         (firstPadsArr, secondPadsArr) = (replicate firstHalfPads (PseudoEOF 0),  replicate secondHalfPads (PseudoEOF 0))
         shiftedAndDoubledStr = shiftedOnce ++ (firstPadsArr ++ (shiftedTwice ++ secondPadsArr))
-        newStringLen = len - 3 + firstHalfPads + secondHalfPads
+        newStringLen = (2 * len) - 3 + firstHalfPads + secondHalfPads
 
     --private int[] shiftAndDouble(int [] input) {
     --    int totalPads = input.length % 3 == 0 ? 3 : input.length % 3;
@@ -146,8 +159,8 @@ indicesWithoutRepeats :: [StrChar] -> Int -> [Index] -> IO ([Index], Int)
 indicesWithoutRepeats doubledInput doubledInputLen tokenOrderWithRepeats = do
     let numTokens = quot doubledInputLen 3
     ioDoubledInputTokens <- newListArray (0, numTokens - 1) $ strToDC3Tokens doubledInput
-    indicesWithoutRepeatsHelper ioDoubledInputTokens tokenOrderWithRepeats [0] 0 1 numTokens    --- TODO: Not totally sure numTokens is the right bound
-
+    (revResult, newAlphabetSize) <- indicesWithoutRepeatsHelper ioDoubledInputTokens tokenOrderWithRepeats [0] 0 1 numTokens    --- TODO: Not totally sure numTokens is the right bound
+    return $ (reverse revResult, newAlphabetSize)
 
 
 indicesWithoutRepeatsHelper :: IOArray Index [StrChar] -> [Index] -> [Index] -> Int -> Index -> Index -> IO ([Index], Int)
@@ -206,7 +219,7 @@ strToDC3Tokens str = token:(strToDC3Tokens rest)
 
 translateToNewAlphabet :: [Index] -> [Index] -> IO [StrChar]
 translateToNewAlphabet tokenOrderWithRepeats indicesWithRepeatsRemoved = do
-    tokenOrder <- newArray_ (0, length tokenOrderWithRepeats)
+    tokenOrder <- newArray_ (0, (length tokenOrderWithRepeats) - 1)
     translateToNewAlphabetHelper tokenOrder tokenOrderWithRepeats indicesWithRepeatsRemoved
     indexArr <- getElems tokenOrder
     return $ map (\i -> (PseudoEOF i)) indexArr
@@ -283,6 +296,7 @@ getT0Ordering str strlen alphabetSize numEOFs unsortedRanks = do
     let tokens = getT0Tokens str strlen unsortedRanks -- tokens is int []
     mapT0ToMaster <$> (radixSort tokens 2 (max alphabetSize strlen) numEOFs)
 
+--getT0Ordering str strlen alphabetSize numEOFs unsortedRanks = return $ [0, 6, 3]
 
 {-
     private int[] getT0Ordering(int[] input, int [] t1t2Order, int [] unsortedRanks, int alphabetSize){        
@@ -602,6 +616,7 @@ toBurrowsWheeler str eof = do
     let str' = appendEOF str 0
     let strLen = length str'
     sa <- strToSuffixArray str' strLen initialAlphabetSize 1
+    putStrLn $ show sa
     ioStr <- newListArray (0, strLen - 1) str'
     suffixArrayToBurrowsWheeler sa ioStr eof
 
