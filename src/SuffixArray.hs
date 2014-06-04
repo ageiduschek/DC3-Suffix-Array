@@ -50,7 +50,7 @@ initialAlphabetSize = 256
 createSuffixArray :: String -> IO SuffixArray
 createSuffixArray str = do
     let str' = appendEOF str 0
-    sa <- strToSuffixArray str' (length str') initialAlphabetSize
+    sa <- strToSuffixArray str' (length str') initialAlphabetSize 1
     let arr =  SuffixRankings sa
     let lcp = lCPInfo arr str'
     lcpRMQ <- fischerHeunRMQ lcp
@@ -63,7 +63,7 @@ createGeneralizedSuffixArray strs = do
     let inputStrs = zipWith (appendEOF) strs [0..]
     let (toIndividualStrAddr, toOverallAddr) = getToFromGeneralMaps inputStrs
     let str' = (concat inputStrs)
-    sa <- strToSuffixArray str' (length str') initialAlphabetSize
+    sa <- strToSuffixArray str' (length str') initialAlphabetSize (length inputStrs)
     let arr =  GeneralizedSuffixRankings $ map toIndividualStrAddr sa
     let lcp = genLCPInfo arr inputStrs
     lcpRMQ <- fischerHeunRMQ lcp
@@ -76,21 +76,21 @@ createGeneralizedSuffixArray strs = do
                                             }
 
 -- This performs the DC3 Algorithm
-strToSuffixArray :: [StrChar] -> Int -> Int -> IO [Index]
-strToSuffixArray [x] _ _ = do return [0]
-strToSuffixArray str strlen alphabetSize = do
-    t1t2Order <- getT1AndT2Ordering str strlen alphabetSize
+strToSuffixArray :: [StrChar] -> Int -> Int -> Int -> IO [Index]
+strToSuffixArray [x] _ _ _ = do return [0]
+strToSuffixArray str strlen alphabetSize numEOFs = do
+    t1t2Order <- getT1AndT2Ordering str strlen alphabetSize numEOFs
     unsortedRanks <- unsort t1t2Order strlen
-    t0Order <- getT0Ordering str strlen alphabetSize t1t2Order unsortedRanks
+    t0Order <- getT0Ordering str strlen alphabetSize numEOFs t1t2Order unsortedRanks
     mergeT0WithRest str strlen t0Order t1t2Order unsortedRanks
 
-getT1AndT2Ordering :: [StrChar] -> Int -> Int -> IO [Index]
-getT1AndT2Ordering str strlen alphabetSize = do
+getT1AndT2Ordering :: [StrChar] -> Int -> Int -> Int -> IO [Index]
+getT1AndT2Ordering str strlen alphabetSize numEOFs = do
     let (doubledInput, doubledInputLen) = shiftAndDouble str strlen
-    tokenOrderWithRepeats <- radixSort doubledInput 3 alphabetSize
-    let (indicesWithRepeatsRemoved, newAlphabetSize) = indicesWithoutRepeats doubledInput tokenOrderWithRepeats 
+    tokenOrderWithRepeats <- radixSort doubledInput 3 alphabetSize numEOFs
+    (indicesWithRepeatsRemoved, newAlphabetSize) <- indicesWithoutRepeats doubledInput doubledInputLen tokenOrderWithRepeats 
     tokensInNewAlphabet <- translateToNewAlphabet tokenOrderWithRepeats indicesWithRepeatsRemoved
-    twoThirdsSuffixArray <- strToSuffixArray tokensInNewAlphabet doubledInputLen newAlphabetSize
+    twoThirdsSuffixArray <- strToSuffixArray tokensInNewAlphabet doubledInputLen newAlphabetSize newAlphabetSize
     return $ mapDoubledArrayTokensToMaster twoThirdsSuffixArray
 
 {-
@@ -139,14 +139,42 @@ shiftAndDouble input len = (shiftedAndDoubledStr, newStringLen)
     --}
 
 
-indicesWithoutRepeats :: [StrChar] -> [Index] -> ([Index], Int)
-indicesWithoutRepeats doubledInput tokenOrderWithRepeats = undefined
+indicesWithoutRepeats :: [StrChar] -> Int -> [Index] -> IO ([Index], Int)
+indicesWithoutRepeats doubledInput doubledInputLen tokenOrderWithRepeats = do
+    let numTokens = quot doubledInputLen 3
+    ioDoubledInputTokens <- newListArray (0, numTokens - 1) $ strToDC3Tokens doubledInput
+    indicesWithoutRepeatsHelper ioDoubledInputTokens tokenOrderWithRepeats [0] 0 1 numTokens    --- TODO: Not totally sure numTokens is the right bound
+
+
+
+indicesWithoutRepeatsHelper :: IOArray Index [StrChar] -> [Index] -> [Index] -> Int -> Index -> Index -> IO ([Index], Int)
+indicesWithoutRepeatsHelper ioDoubledInputTokens tokenOrderWithRepeats revResult rank i bound
+    | i == bound = return (revResult, rank + 1)
+    | otherwise = do
+        let (tokenIndex1, tokenIndex2) = (head tokenOrderWithRepeats, (head . tail) tokenOrderWithRepeats)
+        tokensEqual <- dc3TokenCompare ioDoubledInputTokens tokenIndex1 tokenIndex2
+        let rank' = if tokensEqual then rank else rank + 1
+        let revResult' = rank':revResult
+        indicesWithoutRepeatsHelper ioDoubledInputTokens (tail tokenOrderWithRepeats) revResult' rank' (i + 1) bound
+
+
+dc3TokenCompare :: IOArray Index [StrChar] -> Index -> Index -> IO Bool
+dc3TokenCompare ioDoubledInputTokens t1 t2  = do
+    token1 <- readArray ioDoubledInputTokens t1
+    token2 <- readArray ioDoubledInputTokens t2
+    return $ token1 == token2
+
+strToDC3Tokens :: [StrChar] -> [[StrChar]]
+strToDC3Tokens [] = []
+strToDC3Tokens str = token:(strToDC3Tokens rest)
+    where
+        (token, rest) = splitAt 3 str
 
     --private int [] indicesWithoutRepeats(int [] doubledInput, int [] tokenOrderWithRepeats) {
-    --    int [] result = new int [tokenOrderWithRepeats.length];
+    --    int [] result = new int [tokenOrderWithRepeats.length]; //init to 0 or put a 0 in the first spot
     --    int rank = 0;
-    --    for(int i = 0; i < tokenOrderWithRepeats.length; i++) {
-    --        if(i != 0 && !dc3TokenCompare(doubledInput, tokenOrderWithRepeats[i-1], tokenOrderWithRepeats[i])) {
+    --    for(int i = 1; i < tokenOrderWithRepeats.length; i++) {
+    --        if(!dc3TokenCompare(doubledInput, tokenOrderWithRepeats[i-1], tokenOrderWithRepeats[i])) {
     --            rank++;
     --        }
     --        result[i] = rank;
@@ -157,11 +185,17 @@ indicesWithoutRepeats doubledInput tokenOrderWithRepeats = undefined
 
     --int newAlphabetSize = indicesWithRepeatsRemoved[indicesWithRepeatsRemoved.length -1] + 1;
 
-indicesWithoutRepeatsHelper :: IOArray Index StrChar -> [Index] -> [Index] -> Index -> ([Index], Int)
-indicesWithoutRepeatsHelper _ [] result currRank = (result, currRank + 1)
-indicesWithoutRepeatsHelper doubledInput tokenOrderWithRepeats result currRank = undefined
-    --indicesWithoutRepeatsHelper doubledInput tokenOrderWithRepeats' result' currRank'
-    --where
+
+    --private boolean dc3TokenCompare(int [] doubledInput, int t1, int t2) {
+    --    for(int i=0; i < 3; i++) {
+    --        int ch1 = doubledInput[t1 * 3 + i];
+    --        int ch2 = doubledInput[t2 * 3 + i];
+    --        if(ch1 != ch2) return false;
+    --    }
+    --    return true;
+    --}
+
+
 
 
 
@@ -241,10 +275,10 @@ unsortHelper result (x:xs) i = do
 -}
 
 
-getT0Ordering :: [StrChar] -> Int -> Int -> [Index] -> [Index] ->  IO [Index]
-getT0Ordering str strlen alphabetSize t1t2Order unsortedRanks = do
+getT0Ordering :: [StrChar] -> Int -> Int -> Int -> [Index] -> [Index] ->  IO [Index]
+getT0Ordering str strlen alphabetSize numEOFs t1t2Order unsortedRanks = do
     let tokens = getT0Tokens str strlen unsortedRanks -- tokens is int []
-    mapT0ToMaster <$> (radixSort tokens 2 $ max alphabetSize strlen)
+    mapT0ToMaster <$> (radixSort tokens 2 (max alphabetSize strlen) numEOFs)
 
 
 {-
@@ -301,11 +335,26 @@ getT0TokensHelper revStr revStrLen revUnsortedRanks tokens =
 numT0Tokens :: Int -> Int
 numT0Tokens inputLen = (quot inputLen 3) + (if inputLen `mod` 3 == 0 then 0 else 1)
 
-radixSort :: [StrChar] -> Int -> Int -> IO [Index]
-radixSort tokens tokenSize alphabetSize = undefined
+radixSort :: [StrChar] -> Int -> Int -> Int -> IO [Index]
+radixSort tokens tokenSize alphabetSize numEOFs = do
+    let tokensLen = length tokens
+    ioTokens <- newListArray (0, tokensLen - 1)tokens
+    radixSortHelper ioTokens tokenSize tokensLen alphabetSize numEOFs 0 Nothing
 
+ 
+radixSortHelper :: IOArray Index StrChar -> Int -> Int -> Int -> Int -> Int -> Maybe [Index] -> IO [Index]
+radixSortHelper tokens tokenSize tokensLen alphabetSize numEOFs rnd maybePartiallySortedIndices
+    | rnd < 0 = do
+        let sortedIndices = case maybePartiallySortedIndices of
+                            Nothing -> error "Partially sorted indices shouldn't be NULL"
+                            Just x -> x
+        return $ sortedIndices
+    | otherwise = do
+        buckets <- newArray (-1, numEOFs + alphabetSize - 1) []
+        fillBuckets tokens tokenSize tokensLen buckets numEOFs rnd maybePartiallySortedIndices
+        sortedIndices <- emptyBuckets buckets alphabetSize numEOFs
+        radixSortHelper tokens tokenSize tokensLen alphabetSize numEOFs (rnd - 1) (Just sortedIndices)
 
---radixSortRound tokens tokenSize alphabetSize maybePartiallySortedIndices roundNum = 
 
 {-
     private int[] radixSort(int [] tokens, int tokenSize, int alphabetSize){
@@ -332,6 +381,41 @@ radixSort tokens tokenSize alphabetSize = undefined
         return sortedIndices;
     }
 -}
+
+fillBuckets :: IOArray Index StrChar -> Int -> Int -> IOArray Index [Index] -> Int -> Int -> Maybe [Index] -> IO ()
+fillBuckets tokens tokenSize tokensLen buckets numEOFs rnd maybePartiallySortedIndices = 
+    fillBucketsHelper tokens tokenSize buckets numEOFs rnd maybePartiallySortedIndices 0 (tokensLen `quot` tokenSize)
+
+fillBucketsHelper :: IOArray Index StrChar -> Int -> IOArray Index [Index] -> Int -> Int -> Maybe [Index] -> Index -> Index -> IO ()
+fillBucketsHelper tokens tokenSize buckets numEOFs rnd maybePartiallySortedIndices i bound 
+    | i == bound = return ()
+    | otherwise = do
+        let (tokenIndex, maybePartiallySortedIndices') = case maybePartiallySortedIndices of 
+                            Nothing -> (i, Nothing) 
+                            Just partiallySortedIndices -> (head partiallySortedIndices, Just $ tail partiallySortedIndices)
+        let chIndex = tokenIndex * tokenSize + rnd
+        ch <- readArray tokens chIndex
+        let strChrIndexValue = toIndex ch numEOFs
+        bucketContents <- readArray buckets strChrIndexValue
+        writeArray buckets strChrIndexValue (tokenIndex:bucketContents)
+        fillBucketsHelper tokens tokenSize buckets numEOFs rnd maybePartiallySortedIndices' (i + 1) bound
+
+emptyBuckets :: IOArray Index [Index] -> Int -> Int -> IO [Index]
+emptyBuckets buckets alphabetSize numEOFs = emptyBucketsHelper buckets (-1) (alphabetSize + numEOFs)
+
+emptyBucketsHelper :: (IOArray Index [Index]) -> Index -> Index -> IO [Index]
+emptyBucketsHelper buckets i bound 
+    | i == bound = return [] -- The lowest index possible is -1 (there is a PseudoEOF that can have that value)
+    | otherwise = do
+        bucketContents <- readArray buckets i
+        rest <- emptyBucketsHelper buckets (i + 1) bound
+        return $ (reverse bucketContents) ++ rest
+
+toIndex :: StrChar -> Int -> Index
+toIndex strChar numEOFs = 
+    case strChar of
+        PseudoEOF index -> index
+        ActualChar ch -> numEOFs + (fromEnum ch)
 
 
 
