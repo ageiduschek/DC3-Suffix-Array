@@ -44,6 +44,7 @@ data GeneralizedSuffixArray = GeneralizedSuffixArrayConstructor {  inputStrs :: 
                                                         , genLcpRMQ :: FischerHeun  
                                                         } 
 
+
 initialAlphabetSize :: Int
 initialAlphabetSize = 256
 
@@ -51,38 +52,37 @@ createSuffixArray :: String -> IO SuffixArray
 createSuffixArray str = do
     let str' = appendEOF str 0
     sa <- strToSuffixArray str' (length str') initialAlphabetSize 1
-    lcp <- lCPInfo sa str'
-
-    lcpRMQ <- fischerHeunRMQ lcp
-    return $ SuffixArrayConstructor {inputStr = str', orderedSuffixes = sa, lcp = lcp, lcpRMQ = lcpRMQ}
+    lCP <- lCPInfo sa str'
+    lCPRMQ <- fischerHeunRMQ lCP
+    return $ SuffixArrayConstructor {inputStr = str', orderedSuffixes = sa, lcp = lCP, lcpRMQ = lCPRMQ}
 
 
 -- Creates a generalized suffix array out of a list of strings
 createGeneralizedSuffixArray :: [String] -> IO GeneralizedSuffixArray
 createGeneralizedSuffixArray strs = do
-    let inputStrs = zipWith (appendEOF) strs [0..]
-    let (toIndividualStrAddr, toOverallAddr) = getToFromGeneralMaps inputStrs
-    let str' = (concat inputStrs)
-    sa <- strToSuffixArray str' (length str') initialAlphabetSize (length inputStrs)
+    let inputStrings = zipWith (appendEOF) strs [0..]
+    let (toIndividualStrAddr, toOverallAddr) = getToFromGeneralMaps inputStrings
+    let str' = (concat inputStrings)
+    sa <- strToSuffixArray str' (length str') initialAlphabetSize (length inputStrings)
     let arr = map toIndividualStrAddr sa
 
-    let lcp = genLCPInfo arr inputStrs
-    lcpRMQ <- fischerHeunRMQ lcp
-    return $ GeneralizedSuffixArrayConstructor {  inputStrs = inputStrs 
+    let lCP = genLCPInfo arr inputStrings
+    lCPRMQ <- fischerHeunRMQ lCP
+    return $ GeneralizedSuffixArrayConstructor {  inputStrs = inputStrings 
                                                 , genOrderedSuffix = arr 
-                                                , numInputStrs = length inputStrs
+                                                , numInputStrs = length inputStrings
                                                 , strIndexToOverallIndex = toOverallAddr  
-                                                , genLcp = lcp 
-                                                , genLcpRMQ = lcpRMQ  
+                                                , genLcp = lCP 
+                                                , genLcpRMQ = lCPRMQ  
                                             }
 
 -- This performs the DC3 Algorithm
 strToSuffixArray :: [StrChar] -> Int -> Int -> Int -> IO [Index]
-strToSuffixArray [x] _ _ _ = do return [0]
+strToSuffixArray [_] _ _ _ = do return [0]
 strToSuffixArray str strlen alphabetSize numEOFs = do
     t1t2Order <- getT1AndT2Ordering str strlen alphabetSize numEOFs
     unsortedRanks <- unsort t1t2Order strlen
-    t0Order <- getT0Ordering str strlen alphabetSize numEOFs t1t2Order unsortedRanks
+    t0Order <- getT0Ordering str strlen alphabetSize numEOFs unsortedRanks
     mergeT0WithRest str strlen t0Order t1t2Order unsortedRanks
 
 getT1AndT2Ordering :: [StrChar] -> Int -> Int -> Int -> IO [Index]
@@ -207,13 +207,13 @@ translateToNewAlphabet tokenOrderWithRepeats indicesWithRepeatsRemoved = do
     tokenOrder <- newArray_ (0, length tokenOrderWithRepeats)
     translateToNewAlphabetHelper tokenOrder tokenOrderWithRepeats indicesWithRepeatsRemoved
     indexArr <- getElems tokenOrder
-    return $ map (\index -> (PseudoEOF index)) indexArr
+    return $ map (\i -> (PseudoEOF i)) indexArr
 
 
 translateToNewAlphabetHelper :: IOArray Index Index -> [Index] -> [Index] -> IO ()
-translateToNewAlphabetHelper tokenOrder [] [] = return ()
-translateToNewAlphabetHelper tokenOrder [] _ = error "BLERGH tokenOrderWithRepeats and indicesWithRepeatsRemoved should be the same length!!!"
-translateToNewAlphabetHelper tokenOrder _ [] = error "BLERGH tokenOrderWithRepeats and indicesWithRepeatsRemoved should be the same length!!!"
+translateToNewAlphabetHelper _ [] [] = return ()
+translateToNewAlphabetHelper _ [] _ = error "BLERGH tokenOrderWithRepeats and indicesWithRepeatsRemoved should be the same length!!!"
+translateToNewAlphabetHelper _ _ [] = error "BLERGH tokenOrderWithRepeats and indicesWithRepeatsRemoved should be the same length!!!"
 translateToNewAlphabetHelper tokenOrder tokenOrderWithRepeats indicesWithRepeatsRemoved = do
     writeArray tokenOrder (head tokenOrderWithRepeats) (head indicesWithRepeatsRemoved)
     translateToNewAlphabetHelper tokenOrder (tail tokenOrderWithRepeats) (tail indicesWithRepeatsRemoved)
@@ -228,10 +228,10 @@ mapDoubledArrayTokensToMaster tokenIndices = map (doubledArrayTokenIndicesToMast
 
 
 doubledArrayTokenIndicesToMaster :: Int -> Int -> Index
-doubledArrayTokenIndicesToMaster tokenIndicesLength index = t1T2IndexToMasterIndex unshuffledIndex
+doubledArrayTokenIndicesToMaster tokenIndicesLength i = t1T2IndexToMasterIndex unshuffledIndex
     where 
-        shift = if index < ((tokenIndicesLength + 1) `quot` 2) then 0 else tokenIndicesLength - 1  + (tokenIndicesLength `mod` 2)
-        unshuffledIndex = index * 2 - shift
+        shift = if i < ((tokenIndicesLength + 1) `quot` 2) then 0 else tokenIndicesLength - 1  + (tokenIndicesLength `mod` 2)
+        unshuffledIndex = i * 2 - shift
 
 t1T2IndexToMasterIndex :: Index -> Index
 t1T2IndexToMasterIndex t1T2Index = (t1T2Index `quot` 2)*3 + (t1T2Index `mod` 2) + 1
@@ -260,7 +260,7 @@ unsort sortedIndices mappingSpace = do
 
 
 unsortHelper :: IOArray Index Index -> [Index] -> Int -> IO ()
-unsortHelper result [] i = return ()
+unsortHelper _ [] _ = return ()
 unsortHelper result (x:xs) i = do
     writeArray result x i -- result[x] = i
     unsortHelper result xs (i + 1)
@@ -276,8 +276,8 @@ unsortHelper result (x:xs) i = do
 -}
 
 
-getT0Ordering :: [StrChar] -> Int -> Int -> Int -> [Index] -> [Index] ->  IO [Index]
-getT0Ordering str strlen alphabetSize numEOFs t1t2Order unsortedRanks = do
+getT0Ordering :: [StrChar] -> Int -> Int -> Int -> [Index] ->  IO [Index]
+getT0Ordering str strlen alphabetSize numEOFs unsortedRanks = do
     let tokens = getT0Tokens str strlen unsortedRanks -- tokens is int []
     mapT0ToMaster <$> (radixSort tokens 2 (max alphabetSize strlen) numEOFs)
 
@@ -333,8 +333,8 @@ getT0TokensHelper revStr revStrLen revUnsortedRanks tokens =
     }
 -}
 
-numT0Tokens :: Int -> Int
-numT0Tokens inputLen = (quot inputLen 3) + (if inputLen `mod` 3 == 0 then 0 else 1)
+--numT0Tokens :: Int -> Int
+--numT0Tokens inputLen = (quot inputLen 3) + (if inputLen `mod` 3 == 0 then 0 else 1)
 
 radixSort :: [StrChar] -> Int -> Int -> Int -> IO [Index]
 radixSort tokens tokenSize alphabetSize numEOFs = do
@@ -415,7 +415,7 @@ emptyBucketsHelper buckets i bound
 toIndex :: StrChar -> Int -> Index
 toIndex strChar numEOFs = 
     case strChar of
-        PseudoEOF index -> index
+        PseudoEOF i -> i
         ActualChar ch -> numEOFs + (fromEnum ch)
 
 
@@ -548,12 +548,12 @@ getToFromGeneralMaps strs = (toIndividualStrAddr, toOverallAddr)
 
 -- The following two functions will need to implement the algorithm in http://www.cs.iastate.edu/~cs548/references/linear_lcp.pdf
 lCPInfo :: SuffixRankings -> [StrChar] -> IO LCPInfo
-lCPInfo indices inputStr = do
+lCPInfo indices inputString = do
     let len = length indices
     pos <- newListArray (0, len - 1) indices
     rank <- newArray_ (0, len - 1)
     loadRankArray pos rank 0 len
-    inputStrArray <- newListArray (0, (length inputStr) - 1) inputStr
+    inputStrArray <- newListArray (0, (length inputString) - 1) inputString
     height <- newArray_ (0, len - 1)
     loopOverRankArray pos rank height inputStrArray 0 len 0
     getElems height
@@ -572,7 +572,6 @@ loopOverRankArray pos rank height string i end h
                 loopOverRankArray pos rank height string (succ i) end h''
              else loopOverRankArray pos rank height string (succ i) end h
              
-
 -- Helper for lCPInfo
 incrementH :: IOArray Index StrChar -> Index -> Index -> Int -> IO Int
 incrementH string i k h = do
@@ -592,15 +591,32 @@ loadRankArray pos rank i end
             writeArray rank val i
 
 genLCPInfo :: GeneralizedSuffixRankings -> [[StrChar]] -> LCPInfo
-genLCPInfo indices inputStrs = undefined
+--genLCPInfo indices inputStrs = undefined
+genLCPInfo _ _ = undefined
 
 -- Takes a string and a user provided eof character that doesn't appear anywhere in the string
-toBurrowsWheeler :: String -> Char -> String
-toBurrowsWheeler str eof = undefined
+toBurrowsWheeler :: String -> Char -> IO String
+toBurrowsWheeler str eof = do
+    let str' = appendEOF str 0
+    let strLen = length str'
+    sa <- strToSuffixArray str' strLen initialAlphabetSize 1
+    ioStr <- newListArray (0, strLen - 1) str'
+    suffixArrayToBurrowsWheeler sa ioStr eof
+
+suffixArrayToBurrowsWheeler :: [Index] -> IOArray Index StrChar -> Char -> IO String
+suffixArrayToBurrowsWheeler [] _ _ = return ""
+suffixArrayToBurrowsWheeler sa ioStr eof = do
+    strChar <- readArray ioStr $ (head sa) - 1
+    let ch  = case strChar of 
+                PseudoEOF _ -> eof
+                ActualChar c -> c
+    bwtRest <- suffixArrayToBurrowsWheeler (tail sa) ioStr eof
+    return $ ch:bwtRest
 
 -- Takes a string and a user provided eof character that doesn't appear anywhere in the string
-fromBurrowsWheeler :: String -> Char -> String
-fromBurrowsWheeler str eof = undefined
+fromBurrowsWheeler :: String -> Char -> IO String
+fromBurrowsWheeler _ _ = undefined
+--fromBurrowsWheeler str eof = undefined
 
 -- Longest common extension. Array of indices must match number of strings in GeneralizedSuffixArray
 lce :: GeneralizedSuffixArray -> [Index] -> IO Int
