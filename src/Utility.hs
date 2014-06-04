@@ -48,4 +48,14 @@ loopInner arr i (j, boundJ) f
         f arr (i, j)
         loopInner arr i (j + 1, boundJ) f
 
+mapArr :: IOArray Int Int -> (Int -> Int) -> Int -> Int -> IO ( IOArray Int Int ) 
+mapArr arr f i bound 
+    | i == bound = return arr
+    | otherwise = 
+       do
+        val <- readArray arr i 
+        let val' = f val
+        writeArray arr i val' 
+        mapArr arr f (i + 1) bound  
+
 

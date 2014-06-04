@@ -3,7 +3,7 @@ module SuffixArray (SuffixArray, GeneralizedSuffixArray, createSuffixArray, crea
 import Utility
 import FischerHeun
 --import Data.HashTable as HT
---import Control.Monad
+import Control.Applicative
 import Data.Array.IO
 
 type Length = Int
@@ -14,7 +14,8 @@ type LCPInfo = [Length]
 data SuffixRankings = SuffixRankings [Index] 
 data GeneralizedSuffixRankings = GeneralizedSuffixRankings [(StrNum, Index)]
 
-data StrChar = ActualChar Char | PseudoEOF Index
+
+data StrChar = ActualChar Char | PseudoEOF Index deriving Show
 
 instance Eq StrChar where
     (PseudoEOF eof1) == (PseudoEOF eof2) = eof1 == eof2
@@ -51,7 +52,7 @@ createSuffixArray str = do
     let str' = appendEOF str 0
     sa <- strToSuffixArray str' (length str') initialAlphabetSize
     let arr =  SuffixRankings sa
-    let lcp = lCPInfo arr
+    let lcp = lCPInfo arr str'
     lcpRMQ <- fischerHeunRMQ lcp
     return $ SuffixArrayConstructor {inputStr = str', orderedSuffixes = arr, lcp = lcp, lcpRMQ = lcpRMQ}
 
@@ -64,7 +65,7 @@ createGeneralizedSuffixArray strs = do
     let str' = (concat inputStrs)
     sa <- strToSuffixArray str' (length str') initialAlphabetSize
     let arr =  GeneralizedSuffixRankings $ map toIndividualStrAddr sa
-    let lcp = genLCPInfo arr
+    let lcp = genLCPInfo arr inputStrs
     lcpRMQ <- fischerHeunRMQ lcp
     return $ GeneralizedSuffixArrayConstructor {  inputStrs = inputStrs 
                                                 , genOrderedSuffix = arr 
@@ -78,13 +79,19 @@ createGeneralizedSuffixArray strs = do
 strToSuffixArray :: [StrChar] -> Int -> Int -> IO [Index]
 strToSuffixArray [x] _ _ = do return [0]
 strToSuffixArray str strlen alphabetSize = do
-    let t1t2Order = getT1AndT2Ordering str strlen alphabetSize
+    t1t2Order <- getT1AndT2Ordering str strlen alphabetSize
     unsortedRanks <- unsort t1t2Order strlen
     t0Order <- getT0Ordering str strlen alphabetSize t1t2Order unsortedRanks
-    return $ mergeT0WithRest str t0Order t1t2Order unsortedRanks
+    mergeT0WithRest str strlen t0Order t1t2Order unsortedRanks
 
-getT1AndT2Ordering :: [StrChar] -> Int -> Int -> [Index]
-getT1AndT2Ordering str strlen alphabetSize = undefined
+getT1AndT2Ordering :: [StrChar] -> Int -> Int -> IO [Index]
+getT1AndT2Ordering str strlen alphabetSize = do
+    let (doubledInput, doubledInputLen) = shiftAndDouble str strlen
+    tokenOrderWithRepeats <- radixSort doubledInput 3 alphabetSize
+    let (indicesWithRepeatsRemoved, newAlphabetSize) = indicesWithoutRepeats doubledInput tokenOrderWithRepeats 
+    tokensInNewAlphabet <- translateToNewAlphabet tokenOrderWithRepeats indicesWithRepeatsRemoved
+    twoThirdsSuffixArray <- strToSuffixArray tokensInNewAlphabet doubledInputLen newAlphabetSize
+    return $ mapDoubledArrayTokensToMaster twoThirdsSuffixArray
 
 {-
     private int[] getT1AndT2Ordering(int[] input, int alphabetSize){
@@ -105,8 +112,123 @@ getT1AndT2Ordering str strlen alphabetSize = undefined
     }
 -}
 
+shiftAndDouble :: [StrChar] -> Int -> ([StrChar], Int)
+shiftAndDouble input len = (shiftedAndDoubledStr, newStringLen)
+    where 
+        shiftedOnce = drop 1 input
+        shiftedTwice = drop 2 input
+        padsNeeded l = (3 - (l `mod` 3)) `mod` 3
+        (firstHalfPads, secondHalfPads) = (padsNeeded (len - 1), padsNeeded (len - 2))
+        (firstPadsArr, secondPadsArr) = (replicate firstHalfPads (PseudoEOF 0),  replicate secondHalfPads (PseudoEOF 0))
+        shiftedAndDoubledStr = shiftedOnce ++ (firstPadsArr ++ (shiftedTwice ++ secondPadsArr))
+        newStringLen = len - 3 + firstHalfPads + secondHalfPads
+
+    --private int[] shiftAndDouble(int [] input) {
+    --    int totalPads = input.length % 3 == 0 ? 3 : input.length % 3;
+    --    int [] doubledInput = new int[input.length * 2 + totalPads - 3];
+
+    --    int i = 1, j = 2;
+
+    --    for(; i < input.length; i++) doubledInput[i - 1] = input[i]; //Add string with first char removed
+    --    for(;(i - 1)%3 != 0; i++) doubledInput[i - 1] = 0; //Pad with EOF
+
+    --    for(; j < input.length; j++) doubledInput[i + j - 3] = input[j]; //Add string with first two chars removed
+    --    for(;(j - 2)%3 != 0; j++) doubledInput[i + j - 3] = 0; //Pad with EOF
+
+    --    return doubledInput;
+    --}
+
+
+indicesWithoutRepeats :: [StrChar] -> [Index] -> ([Index], Int)
+indicesWithoutRepeats doubledInput tokenOrderWithRepeats = undefined
+
+    --private int [] indicesWithoutRepeats(int [] doubledInput, int [] tokenOrderWithRepeats) {
+    --    int [] result = new int [tokenOrderWithRepeats.length];
+    --    int rank = 0;
+    --    for(int i = 0; i < tokenOrderWithRepeats.length; i++) {
+    --        if(i != 0 && !dc3TokenCompare(doubledInput, tokenOrderWithRepeats[i-1], tokenOrderWithRepeats[i])) {
+    --            rank++;
+    --        }
+    --        result[i] = rank;
+    --    }
+
+    --    return result;
+    --}
+
+    --int newAlphabetSize = indicesWithRepeatsRemoved[indicesWithRepeatsRemoved.length -1] + 1;
+
+indicesWithoutRepeatsHelper :: IOArray Index StrChar -> [Index] -> [Index] -> Index -> ([Index], Int)
+indicesWithoutRepeatsHelper _ [] result currRank = (result, currRank + 1)
+indicesWithoutRepeatsHelper doubledInput tokenOrderWithRepeats result currRank = undefined
+    --indicesWithoutRepeatsHelper doubledInput tokenOrderWithRepeats' result' currRank'
+    --where
+
+
+
+
+
+translateToNewAlphabet :: [Index] -> [Index] -> IO [StrChar]
+translateToNewAlphabet tokenOrderWithRepeats indicesWithRepeatsRemoved = do
+    tokenOrder <- newArray_ (0, length tokenOrderWithRepeats)
+    translateToNewAlphabetHelper tokenOrder tokenOrderWithRepeats indicesWithRepeatsRemoved
+    indexArr <- getElems tokenOrder
+    return $ map (\index -> (PseudoEOF index)) indexArr
+
+
+translateToNewAlphabetHelper :: IOArray Index Index -> [Index] -> [Index] -> IO ()
+translateToNewAlphabetHelper tokenOrder [] [] = return ()
+translateToNewAlphabetHelper tokenOrder [] _ = error "BLERGH tokenOrderWithRepeats and indicesWithRepeatsRemoved should be the same length!!!"
+translateToNewAlphabetHelper tokenOrder _ [] = error "BLERGH tokenOrderWithRepeats and indicesWithRepeatsRemoved should be the same length!!!"
+translateToNewAlphabetHelper tokenOrder tokenOrderWithRepeats indicesWithRepeatsRemoved = do
+    writeArray tokenOrder (head tokenOrderWithRepeats) (head indicesWithRepeatsRemoved)
+    translateToNewAlphabetHelper tokenOrder (tail tokenOrderWithRepeats) (tail indicesWithRepeatsRemoved)
+
+    --int [] tokenOrder = new int[tokenOrderWithRepeats.length];
+    --for(int i = 0; i < tokenOrderWithRepeats.length; i++) {
+    --    tokenOrder[tokenOrderWithRepeats[i]] = indicesWithRepeatsRemoved[i];
+    --}
+
+mapDoubledArrayTokensToMaster :: [Index] -> [Index]
+mapDoubledArrayTokensToMaster tokenIndices = map (doubledArrayTokenIndicesToMaster $ length tokenIndices) tokenIndices
+
+
+doubledArrayTokenIndicesToMaster :: Int -> Int -> Index
+doubledArrayTokenIndicesToMaster tokenIndicesLength index = t1T2IndexToMasterIndex unshuffledIndex
+    where 
+        shift = if index < ((tokenIndicesLength + 1) `quot` 2) then 0 else tokenIndicesLength - 1  + (tokenIndicesLength `mod` 2)
+        unshuffledIndex = index * 2 - shift
+
+t1T2IndexToMasterIndex :: Index -> Index
+t1T2IndexToMasterIndex t1T2Index = (t1T2Index `quot` 2)*3 + (t1T2Index `mod` 2) + 1
+--private int [] mapDoubledArrayTokensToMaster(int [] tokenIndices) {
+--    int [] masterIndices = new int[tokenIndices.length];
+--    for(int i=0; i < tokenIndices.length; i++) {
+--        int shift = tokenIndices[i] < (tokenIndices.length + 1)/2 ? 0 : tokenIndices.length - 1  + (tokenIndices.length % 2);
+--        int unshuffledIndex = tokenIndices[i] * 2 - shift;
+--        masterIndices[i] = t1T2IndexToMasterIndex(unshuffledIndex);
+--    }
+--    return masterIndices;
+--}
+
+    --private int t1T2IndexToMasterIndex(int t1T2Index) {
+    --    return (t1T2Index/2)*3 + (t1T2Index%2) + 1;
+    --}
+
+
+
+
 unsort :: [Index] -> Int -> IO [Index]
-unsort t1t2Order len = undefined
+unsort sortedIndices mappingSpace = do
+    result <- newArray (0, mappingSpace - 1) 0
+    unsortHelper result sortedIndices 0
+    getElems result
+
+
+unsortHelper :: IOArray Index Index -> [Index] -> Int -> IO ()
+unsortHelper result [] i = return ()
+unsortHelper result (x:xs) i = do
+    writeArray result x i -- result[x] = i
+    unsortHelper result xs (i + 1)
 
 {-
     private int[] unsort(int [] sortedIndices, int mappingSpace) {
@@ -119,21 +241,11 @@ unsort t1t2Order len = undefined
 -}
 
 
-mapIOArr :: (Int -> Int) -> Int -> Int -> IOArray Int Int -> IO ( IOArray Int Int ) 
-mapIOArr f i bound arr
-    | i == bound = return arr
-    | otherwise = 
-       do
-        val <- readArray arr i 
-        let val' = f val
-        writeArray arr i val' 
-        mapIOArr f (i + 1) bound arr 
-
 getT0Ordering :: [StrChar] -> Int -> Int -> [Index] -> [Index] ->  IO [Index]
 getT0Ordering str strlen alphabetSize t1t2Order unsortedRanks = do
-    let tokens = getT0Tokens str unsortedRanks -- tokens is int []
-    sortedIndices <- radixSort tokens 2 $ max alphabetSize strlen
-    mapT0ToMaster sortedIndices
+    let tokens = getT0Tokens str strlen unsortedRanks -- tokens is int []
+    mapT0ToMaster <$> (radixSort tokens 2 $ max alphabetSize strlen)
+
 
 {-
     private int[] getT0Ordering(int[] input, int [] t1t2Order, int [] unsortedRanks, int alphabetSize){        
@@ -145,8 +257,32 @@ getT0Ordering str strlen alphabetSize t1t2Order unsortedRanks = do
     }
 -}
 
-getT0Tokens :: [StrChar] -> [Index] -> [Int]
-getT0Tokens str unsortedRanked = undefined
+--testGetT0Tokens :: IO()
+--testGetT0Tokens = do
+--    let str' = appendEOF "aaaa" 0
+--    putStrLn $ show $ getT0Tokens str' (length str') [0, 2, 1, 0, 0]
+
+getT0Tokens :: [StrChar] -> Int -> [Index] -> [StrChar]
+getT0Tokens str strlen unsortedRanks = getT0TokensHelper revStr revStrLen revUnsortedRanks []
+    where
+        nToLastT0 = (strlen - 1) `mod` 3 
+        revStr = drop nToLastT0 (reverse str)
+        revStrLen = strlen - nToLastT0
+        revUnsortedRanks = if nToLastT0 == 0 
+                            then (-1):(reverse unsortedRanks) 
+                            else drop (nToLastT0 - 1) (reverse unsortedRanks)
+
+getT0TokensHelper :: [StrChar] -> Int -> [Index] -> [StrChar] -> [StrChar]
+getT0TokensHelper _ 0 _ tokens = tokens
+getT0TokensHelper revStr revStrLen revUnsortedRanks tokens = 
+    getT0TokensHelper revStr' (revStrLen - numToDrop) revUnsortedRanks' tokens'
+    where
+        (ch, rankCh) = (head revStr, PseudoEOF (head revUnsortedRanks))
+        tokens' = ch:rankCh:tokens
+        numToDrop = min 3 revStrLen
+        dropUpTo3 = drop numToDrop
+        (revStr', revUnsortedRanks') = (dropUpTo3 revStr, dropUpTo3 revUnsortedRanks)
+
 {-
     private int [] getT0Tokens(int[] input, int[] unsortedRanks) {
         int numTokens = input.length/3 + (input.length %3 == 0 ? 0 : 1);
@@ -162,8 +298,15 @@ getT0Tokens str unsortedRanked = undefined
     }
 -}
 
-radixSort :: [Int] -> Int -> Int -> IO [Index]
+numT0Tokens :: Int -> Int
+numT0Tokens inputLen = (quot inputLen 3) + (if inputLen `mod` 3 == 0 then 0 else 1)
+
+radixSort :: [StrChar] -> Int -> Int -> IO [Index]
 radixSort tokens tokenSize alphabetSize = undefined
+
+
+--radixSortRound tokens tokenSize alphabetSize maybePartiallySortedIndices roundNum = 
+
 {-
     private int[] radixSort(int [] tokens, int tokenSize, int alphabetSize){
 
@@ -190,8 +333,17 @@ radixSort tokens tokenSize alphabetSize = undefined
     }
 -}
 
-mapT0ToMaster :: [Index] -> IO [Index]
-mapT0ToMaster sortedIndices = undefined
+
+
+
+mapT0ToMaster :: [Index] -> [Index]
+mapT0ToMaster sortedIndices = map t0IndexToMasterIndex sortedIndices
+
+
+t0IndexToMasterIndex :: Index -> Index
+t0IndexToMasterIndex t0Index = t0Index * 3
+
+
 {-
     private int [] mapT0ToMaster(int [] t0Indices) {
         int [] masterIndices = new int[t0Indices.length];
@@ -200,10 +352,40 @@ mapT0ToMaster sortedIndices = undefined
         }
         return masterIndices;
     }
+
+    private int t0IndexToMasterIndex(int t0Index) {
+        return t0Index*3;
+    }
 -}
 
-mergeT0WithRest :: [StrChar] -> [Index] -> [Index] -> [Index] -> [Index]
-mergeT0WithRest str t0Order t1t2Order unsortedRanks = undefined
+mergeT0WithRest :: [StrChar] -> Int -> [Index] -> [Index] -> [Index] -> IO [Index]
+mergeT0WithRest str strLen t0Order t1t2Order unsortedRanks = do
+    ioInput <- newListArray (0, strLen - 1) str
+    ioUnsortedRanks <- newListArray (0, strLen - 1) unsortedRanks
+    suffixArrayResult <- newArray_ (0, strLen - 1)
+    mergeT0WithRestHelper ioInput ioUnsortedRanks t0Order t1t2Order suffixArrayResult 0
+    getElems suffixArrayResult
+
+
+
+mergeT0WithRestHelper :: IOArray Index StrChar -> IOArray Index Index -> [Index] -> [Index] -> IOArray Index Index -> Index -> IO ()
+mergeT0WithRestHelper _ _ [] t1t2Order suffixArrayResult i = mergeT0WithRestFinish t1t2Order suffixArrayResult i
+mergeT0WithRestHelper _ _ t0Order [] suffixArrayResult i = mergeT0WithRestFinish t0Order suffixArrayResult i
+mergeT0WithRestHelper ioInput ioUnsortedRanks t0Order t1t2Order suffixArrayResult i = do
+    t0TokenLessThanT1T2Token <- suffixCompare ioInput ioUnsortedRanks t0Order t1t2Order
+    if t0TokenLessThanT1T2Token 
+        then do
+            writeArray suffixArrayResult i (head t0Order)
+            mergeT0WithRestHelper ioInput ioUnsortedRanks (tail t0Order) t1t2Order suffixArrayResult (i + 1)
+        else do
+            writeArray suffixArrayResult i (head t1t2Order)
+            mergeT0WithRestHelper ioInput ioUnsortedRanks t0Order (tail t1t2Order) suffixArrayResult (i + 1)
+
+mergeT0WithRestFinish :: [Index] -> IOArray Index Index -> Index -> IO ()
+mergeT0WithRestFinish [] _ _ = return ()
+mergeT0WithRestFinish rest suffixArrayResult i = do
+    writeArray suffixArrayResult i (head rest)
+    mergeT0WithRestFinish (tail rest) suffixArrayResult (i + 1) 
 
 {-
     private int[] mergeT0WithRest(int[] input, int [] t0Order, int [] t1t2Order, int [] unsortedRanks) {
@@ -223,7 +405,45 @@ mergeT0WithRest str t0Order t1t2Order unsortedRanks = undefined
 
         return suffixArray;
     }
+
+    private boolean suffixCompare(int i, int j, int[] input, int [] t0Order, int [] t1t2Order, int [] unsortedRanks) {
+        int t0CharIndex = t0Order[i];
+        int t1t2CharIndex = t1t2Order[j];
+
+        while(true){
+            int t0Char = input[t0CharIndex];
+            int t1t2Char = input[t1t2CharIndex];
+
+            if (t0Char != t1t2Char) return t0Char < t1t2Char;
+
+
+            if((t0CharIndex + 1) % 3 != 0  && (t1t2CharIndex + 1) % 3 != 0) {
+                return unsortedRanks[t0CharIndex + 1] < unsortedRanks[t1t2CharIndex + 1];
+            }
+
+            t0CharIndex++;
+            t1t2CharIndex++;
+        }
+    }
 -}
+
+suffixCompare :: IOArray Index StrChar -> IOArray Index Index -> [Index] -> [Index] -> IO Bool
+suffixCompare input unsortedRanks t0Order t1t2Order = do
+    let t0CharIndex = head t0Order
+    let t1t2CharIndex = head t1t2Order
+    t0Char <- readArray input t0CharIndex
+    t1t2Char <- readArray input t1t2CharIndex
+    suffixCompareHelper input unsortedRanks t0Char t0CharIndex t1t2Char t1t2CharIndex
+
+
+suffixCompareHelper :: IOArray Index StrChar -> IOArray Index Index -> StrChar -> Index -> StrChar -> Index -> IO Bool
+suffixCompareHelper input unsortedRanks t0Char t0CharIndex t1t2Char t1t2CharIndex 
+    | t0Char /= t1t2Char = return $ t0Char < t1t2Char
+    | otherwise = do
+        let (t0CharIndex', t1t2CharIndex') = (t0CharIndex + 1, t1t2CharIndex + 1)
+        t0Char' <- readArray input t0CharIndex'
+        t1t2Char' <- readArray input t1t2CharIndex'
+        suffixCompareHelper input unsortedRanks t0Char' t0CharIndex' t1t2Char' t1t2CharIndex'
 
 
 
@@ -242,11 +462,11 @@ getToFromGeneralMaps strs = (toIndividualStrAddr, toOverallAddr)
 
 
 -- The following two functions will need to implement the algorithm in http://www.cs.iastate.edu/~cs548/references/linear_lcp.pdf
-lCPInfo :: SuffixRankings -> LCPInfo
-lCPInfo indices = undefined
+lCPInfo :: SuffixRankings -> [StrChar] ->LCPInfo
+lCPInfo indices inputStr = undefined
 
-genLCPInfo :: GeneralizedSuffixRankings -> LCPInfo
-genLCPInfo indices = undefined
+genLCPInfo :: GeneralizedSuffixRankings -> [[StrChar]] -> LCPInfo
+genLCPInfo indices inputStrs = undefined
 
 -- Takes a string and a user provided eof character that doesn't appear anywhere in the string
 toBurrowsWheeler :: String -> Char -> String

@@ -3,6 +3,5 @@ module Main where
 import SuffixArray
 
 main :: IO ()
-main = do
-    putStrLn $ toBurrowsWheeler "nonsense" '$'
+main = do putStrLn "foobar"
 
