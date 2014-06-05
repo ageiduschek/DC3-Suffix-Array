@@ -3,6 +3,7 @@ module SuffixArray (SuffixArray, GeneralizedSuffixArray, createSuffixArray, crea
 import Utility
 import FischerHeun
 --import Data.HashTable as HT
+--import Control.Monad
 import Control.Applicative
 import Data.Array.IO
 import Data.List
@@ -10,7 +11,7 @@ import Data.List
 type Length = Int
 type StrNum = Index
 
-type LCPInfo = [Length]
+type LCPInfo = IOArray Index Length
 
 type SuffixRankings = [Index] 
 type GeneralizedSuffixRankings = [(StrNum, Index)]
@@ -40,7 +41,7 @@ data SuffixArray = SuffixArrayConstructor { inputStr :: [StrChar]
 data GeneralizedSuffixArray = GeneralizedSuffixArrayConstructor {  inputStrs :: [[StrChar]] 
                                                         , genOrderedSuffix :: GeneralizedSuffixRankings
                                                         , numInputStrs :: Int 
-                                                        , strIndexToOverallIndex :: (StrNum, Index) -> Index 
+                                                        , strIndexToSAIndex :: (StrNum, Index) -> IO Index 
                                                         , genLcp :: LCPInfo 
                                                         , genLcpRMQ :: FischerHeun  
                                                         } 
@@ -54,7 +55,8 @@ createSuffixArray str = do
     let str' = appendEOF str 0
     sa <- strToSuffixArray str' (length str') initialAlphabetSize 1
     lCP <- lCPInfo sa str'
-    lCPRMQ <- fischerHeunRMQ lCP
+    lcpList <- getElems lCP
+    lCPRMQ <- fischerHeunRMQ lcpList
     return $ SuffixArrayConstructor {inputStr = str', orderedSuffixes = sa, lcp = lCP, lcpRMQ = lCPRMQ}
 
 printSuffixes :: SuffixArray -> IO ()
@@ -75,17 +77,17 @@ printStrCharString ((PseudoEOF _):strChar)  = printStrCharString strChar
 createGeneralizedSuffixArray :: [String] -> IO GeneralizedSuffixArray
 createGeneralizedSuffixArray strs = do
     let inputStrings = zipWith (appendEOF) strs [0..]
-    (toIndividualStrAddr, toOverallAddr) <- getToFromGeneralMaps inputStrings
     let str' = (concat inputStrings)
     sa <- strToSuffixArray str' (length str') initialAlphabetSize (length inputStrings)
-    let arr = map toIndividualStrAddr sa
-
+    (toIndividualStrAddr, strIndexToSuffixArrayIndex) <- getToFromGeneralMaps inputStrings sa
+    arr <- mapM toIndividualStrAddr sa
     lCP <- lCPInfo sa str' --genLCPInfo arr inputStrings
-    lCPRMQ <- fischerHeunRMQ lCP
+    lcpList <- getElems lCP
+    lCPRMQ <- fischerHeunRMQ lcpList
     return $ GeneralizedSuffixArrayConstructor {  inputStrs = inputStrings 
                                                 , genOrderedSuffix = arr 
                                                 , numInputStrs = length inputStrings
-                                                , strIndexToOverallIndex = toOverallAddr  
+                                                , strIndexToSAIndex = strIndexToSuffixArrayIndex  
                                                 , genLcp = lCP 
                                                 , genLcpRMQ = lCPRMQ  
                                             }
@@ -339,27 +341,37 @@ appendEOF :: String -> Index -> [StrChar]
 appendEOF [] i = (PseudoEOF i):[]
 appendEOF (x:xs) i = (ActualChar x):(appendEOF xs i)
 
---getToFromGeneralMaps :: [[StrChar]] -> (Index -> (StrNum, Index), (StrNum, Index) -> Index)
---getToFromGeneralMaps strs = (toIndividualStrAddr, toOverallAddr)
---    where 
---        strsWithIndices = zip [0..] strs --[(0, "foo$"), (1, "bar$"), (2, "a$")]
---        strsOfIndices = map (\(i, str) -> replicate (length str) i) strsWithIndices -- [[0, 0, 0, 0], [1, 1, 1, 1], [2, 2]]
---        individualStrAddresses = concat $ map (\x -> zip x [0..]) strsOfIndices -- [(0, 0), (0, 1), (0, 2), (0, 3), (1, 0), (1, 1), (1, 2), ...]
---        toIndividualStrAddr i =  individualStrAddresses !! i
---        toOverallAddr (strNum, i) = i + (map length strsOfIndices) !! strNum
+getToFromGeneralMaps :: [[StrChar]] -> SuffixRankings -> IO (Index -> IO (StrNum, Index), (StrNum, Index) -> IO Index)
+getToFromGeneralMaps strs sa = do
+    let totalLength = length $ concat strs 
+    let strsWithIndices = zip [0..] strs --[(0, "foo$"), (1, "bar$"), (2, "a$")]
+    let strsOfIndices = map (\(i, str) -> replicate (length str) i) strsWithIndices -- [[0, 0, 0, 0], [1, 1, 1, 1], [2, 2]]
+    let individualStrAddresses = concat $ map (\x -> zip x [0..]) strsOfIndices -- [(0, 0), (0, 1), (0, 2), (0, 3), (1, 0), (1, 1), (1, 2), ...]
+    ioIndividualStrAddresses <- newListArray (0, totalLength - 1) individualStrAddresses
+    let toIndividualStrAddr = toIndividualStrAddr' ioIndividualStrAddresses
+    cumSumOfLengths <- newListArray (0, length strs) $ 0 : (scanl1 (+) $ map length strsOfIndices)
+    strIToSAI <- invertSA sa
+    let strIndexToSuffixArrayIndex = strIndexToSuffixArrayIndex' cumSumOfLengths strIToSAI
+    return (toIndividualStrAddr, strIndexToSuffixArrayIndex)
 
+toIndividualStrAddr' :: IOArray Index (StrNum, Index) -> Index -> IO (StrNum, Index)
+toIndividualStrAddr' ioIndividualStrAddresses i = readArray ioIndividualStrAddresses i
 
-getToFromGeneralMaps :: [[StrChar]] -> IO (Index -> (StrNum, Index), (StrNum, Index) -> Index)
-getToFromGeneralMaps strs = do
-    return (toIndividualStrAddr, toOverallAddr)
-    where 
-        strsWithIndices = zip [0..] strs --[(0, "foo$"), (1, "bar$"), (2, "a$")]
-        strsOfIndices = map (\(i, str) -> replicate (length str) i) strsWithIndices -- [[0, 0, 0, 0], [1, 1, 1, 1], [2, 2]]
-        individualStrAddresses = concat $ map (\x -> zip x [0..]) strsOfIndices -- [(0, 0), (0, 1), (0, 2), (0, 3), (1, 0), (1, 1), (1, 2), ...]
-        toIndividualStrAddr i =  individualStrAddresses !! i
-        cumSumOfLengths = 0 : (scanl1 (+) $ map length strsOfIndices)
-        toOverallAddr (strNum, i) = i + (cumSumOfLengths !! strNum)
+strIndexToSuffixArrayIndex' :: IOArray Index Int -> IOArray Index Index -> (StrNum, Index) -> IO Index
+strIndexToSuffixArrayIndex' cumSumOfLengths strIToSAI (strNum, i) = do 
+    strStart <- readArray cumSumOfLengths strNum
+    readArray strIToSAI (strStart + i)
 
+invertSA :: SuffixRankings -> IO(IOArray Index Index)
+invertSA sa = do
+    strIToSAI <- newArray_ (0, (length sa) -1)
+    invertSAHelper sa 0 strIToSAI
+
+invertSAHelper :: SuffixRankings -> Index -> IOArray Index Index -> IO(IOArray Index Index)
+invertSAHelper [] _ strIToSAI = return strIToSAI
+invertSAHelper sa i strIToSAI = do
+    writeArray strIToSAI (head sa) i
+    invertSAHelper (tail sa) (i + 1) strIToSAI
 
 -- The following two functions will need to implement the algorithm in http://www.cs.iastate.edu/~cs548/references/linear_lcp.pdf
 lCPInfo :: SuffixRankings -> [StrChar] -> IO LCPInfo
@@ -371,7 +383,7 @@ lCPInfo indices inputString = do
     inputStrArray <- newListArray (0, (length inputString) - 1) inputString
     height <- newArray (0, len - 1) 0
     loopOverRankArray pos rank height inputStrArray 0 (pred len) 0
-    getElems height
+    return height
 
 -- Helper for lCPInfo
 loopOverRankArray :: IOArray Index Index -> IOArray Index Index -> IOArray Index Int -> IOArray Index StrChar -> Index -> Index -> Int -> IO ()
@@ -490,9 +502,9 @@ thirdPassHelper p c bwt eof i j decodedStr
 -- Longest common extension. Array of indices must match number of strings in GeneralizedSuffixArray
 lce :: GeneralizedSuffixArray -> [Index] -> IO Int
 lce sa indices = do
+    addresses <- mapM (strIndexToSAIndex sa) (zip [0..] indices)
+    genLcpList <- getElems $ genLcp sa
     indexOfLengthOfLCE <- if length indices /= numInputStrs sa 
                             then error "must provide same number of indices as there are in the GeneralizedSuffixArray" 
-                            else (genLcpRMQ sa) (minimum addresses) (maximum addresses)
-    return $ (genLcp sa) !! (indexOfLengthOfLCE - 1)-- TODO CHANGE TO IOARRAY
-    where 
-        addresses = map (strIndexToOverallIndex sa) (zip [0..] indices)
+                            else (genLcpRMQ sa) ((minimum addresses) + 1) (maximum addresses)
+    readArray (genLcp sa) (indexOfLengthOfLCE)
