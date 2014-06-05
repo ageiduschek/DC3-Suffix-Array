@@ -1,4 +1,4 @@
-module SuffixArray (SuffixArray, GeneralizedSuffixArray, createSuffixArray, createGeneralizedSuffixArray, toBurrowsWheeler, fromBurrowsWheeler, lce, printSuffixes) where
+module SuffixArray (SuffixArray, GeneralizedSuffixArray, createSuffixArray, createGeneralizedSuffixArray, printSuffixes, printGeneralizedSuffixes, toBurrowsWheeler, fromBurrowsWheeler, lce, printSuffixes) where
 
 import Utility
 import FischerHeun
@@ -64,15 +64,23 @@ printSuffixes :: SuffixArray -> IO ()
 printSuffixes (SuffixArrayConstructor _ [] _ _) = return ()
 printSuffixes (SuffixArrayConstructor str (i:os) x y) = do
     printStrCharString (drop i str)
+    putStrLn ""
     printSuffixes (SuffixArrayConstructor str os x y)
 
+printGeneralizedSuffixes :: GeneralizedSuffixArray -> IO ()
+printGeneralizedSuffixes (GeneralizedSuffixArrayConstructor _ [] _ _ _ _ _) = return ()
+printGeneralizedSuffixes (GeneralizedSuffixArrayConstructor strs ((string, index):os) a b c d e) = do
+    let str = drop index (strs !! string)
+    printStrCharString str
+    putStrLn $ " (" ++ (show string) ++ ")"
+    printGeneralizedSuffixes (GeneralizedSuffixArrayConstructor strs os a b c d e)
+
 printStrCharString :: [StrChar] -> IO ()
-printStrCharString []                       = putStrLn ""
+printStrCharString []                       = return ()
 printStrCharString ((ActualChar x):strChar) = do
     putStr (x:"")
     printStrCharString strChar
 printStrCharString ((PseudoEOF _):strChar)  = printStrCharString strChar
-
 
 -- Creates a generalized suffix array out of a list of strings
 createGeneralizedSuffixArray :: [String] -> IO GeneralizedSuffixArray
