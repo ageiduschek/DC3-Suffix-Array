@@ -1,4 +1,16 @@
-module SuffixArray (SuffixArray, GeneralizedSuffixArray, createSuffixArray, createGeneralizedSuffixArray, printSuffixes, printGeneralizedSuffixes, toBurrowsWheeler, fromBurrowsWheeler, lce, printSuffixes) where
+module SuffixArray (SuffixArray, 
+                    GeneralizedSuffixArray, 
+                    createSuffixArray, 
+                    createGeneralizedSuffixArray, 
+                    getSuffixRankings,
+                    getGeneralizedSuffixRankings,
+                    getInputStr,
+                    getInputStrs,
+                    printSuffixes, 
+                    printGeneralizedSuffixes, 
+                    toBurrowsWheeler, 
+                    fromBurrowsWheeler, 
+                    lce) where
 
 import Utility
 import FischerHeun
@@ -15,7 +27,6 @@ type LCPInfo = IOArray Index Length
 
 type SuffixRankings = [Index] 
 type GeneralizedSuffixRankings = [(StrNum, Index)]
-
 
 data StrChar = ActualChar Char | PseudoEOF Index deriving Show
 
@@ -34,7 +45,8 @@ instance Ord StrChar where
 data SuffixArray = SuffixArrayConstructor { inputStr :: [StrChar]  
                      , orderedSuffixes :: SuffixRankings  
                      , lcp :: LCPInfo
-                     , lcpRMQ :: FischerHeun  
+                     , lcpRMQ :: FischerHeun
+                     , originalInputStr :: String  
                      } 
 
 -- A suffix array for many strings
@@ -44,7 +56,8 @@ data GeneralizedSuffixArray = GeneralizedSuffixArrayConstructor {  inputStrs :: 
                                                         , strLengths :: [Int]
                                                         , strIndexToSAIndex :: (StrNum, Index) -> IO Index 
                                                         , genLcp :: LCPInfo 
-                                                        , genLcpRMQ :: FischerHeun  
+                                                        , genLcpRMQ :: FischerHeun
+                                                        , originalInputStrs :: [String] 
                                                         } 
 
 
@@ -58,29 +71,7 @@ createSuffixArray str = do
     lCP <- lCPInfo sa str'
     lcpList <- getElems lCP
     lCPRMQ <- fischerHeunRMQ lcpList
-    return $ SuffixArrayConstructor {inputStr = str', orderedSuffixes = sa, lcp = lCP, lcpRMQ = lCPRMQ}
-
-printSuffixes :: SuffixArray -> IO ()
-printSuffixes (SuffixArrayConstructor _ [] _ _) = return ()
-printSuffixes (SuffixArrayConstructor str (i:os) x y) = do
-    printStrCharString (drop i str)
-    putStrLn ""
-    printSuffixes (SuffixArrayConstructor str os x y)
-
-printGeneralizedSuffixes :: GeneralizedSuffixArray -> IO ()
-printGeneralizedSuffixes (GeneralizedSuffixArrayConstructor _ [] _ _ _ _ _) = return ()
-printGeneralizedSuffixes (GeneralizedSuffixArrayConstructor strs ((string, index):os) a b c d e) = do
-    let str = drop index (strs !! string)
-    printStrCharString str
-    putStrLn $ " (" ++ (show string) ++ ")"
-    printGeneralizedSuffixes (GeneralizedSuffixArrayConstructor strs os a b c d e)
-
-printStrCharString :: [StrChar] -> IO ()
-printStrCharString []                       = return ()
-printStrCharString ((ActualChar x):strChar) = do
-    putStr (x:"")
-    printStrCharString strChar
-printStrCharString ((PseudoEOF _):strChar)  = printStrCharString strChar
+    return $ SuffixArrayConstructor {inputStr = str', orderedSuffixes = sa, lcp = lCP, lcpRMQ = lCPRMQ, originalInputStr = str}
 
 -- Creates a generalized suffix array out of a list of strings
 createGeneralizedSuffixArray :: [String] -> IO GeneralizedSuffixArray
@@ -99,8 +90,57 @@ createGeneralizedSuffixArray strs = do
                                                 , strLengths = map length inputStrings
                                                 , strIndexToSAIndex = strIndexToSuffixArrayIndex  
                                                 , genLcp = lCP 
-                                                , genLcpRMQ = lCPRMQ  
+                                                , genLcpRMQ = lCPRMQ
+                                                , originalInputStrs = strs  
                                             }
+
+getSuffixRankings :: SuffixArray -> [Int]
+getSuffixRankings sa = orderedSuffixes sa
+
+getGeneralizedSuffixRankings :: GeneralizedSuffixArray -> [(Int, Int)]
+getGeneralizedSuffixRankings gsa = genOrderedSuffix gsa
+
+getInputStr :: SuffixArray -> String
+getInputStr sa = originalInputStr sa
+
+getInputStrs :: GeneralizedSuffixArray -> [String]
+getInputStrs gsa = originalInputStrs gsa
+
+
+printSuffixes :: SuffixArray -> IO ()
+printSuffixes (SuffixArrayConstructor _ [] _ _ _) = return ()
+printSuffixes (SuffixArrayConstructor str (i:os) x y z) = do
+    printStrCharString (drop i str)
+    putStrLn ""
+    printSuffixes (SuffixArrayConstructor str os x y z)
+
+printGeneralizedSuffixes :: GeneralizedSuffixArray -> IO ()
+printGeneralizedSuffixes (GeneralizedSuffixArrayConstructor _ [] _ _ _ _ _ _) = return ()
+printGeneralizedSuffixes (GeneralizedSuffixArrayConstructor strs ((string, i):os) a b c d e f) = do
+    let str = drop i (strs !! string)
+    printStrCharString str
+    putStrLn $ " (" ++ (show string) ++ ")"
+    printGeneralizedSuffixes (GeneralizedSuffixArrayConstructor strs os a b c d e f)
+
+printStrCharString :: [StrChar] -> IO ()
+printStrCharString []                       = return ()
+printStrCharString ((ActualChar x):strChar) = do
+    putStr (x:"")
+    printStrCharString strChar
+printStrCharString ((PseudoEOF _):strChar)  = printStrCharString strChar
+
+
+-- Longest common extension. Array of indices must match number of strings in GeneralizedSuffixArray
+lce :: GeneralizedSuffixArray -> [Index] -> IO Int
+lce sa indices = do
+    if length indices /= numInputStrs sa 
+        then error "SuffixArray.LCE: ust provide same number of indices as there are in the GeneralizedSuffixArray"
+        else return ()
+    let outOfBounds = checkBounds sa indices
+    if outOfBounds then error "SuffixArray.LCE: Input indices out of bounds" else return ()
+    addresses <- mapM (strIndexToSAIndex sa) (zip [0..] indices)
+    indexOfLengthOfLCE <- (genLcpRMQ sa) ((minimum addresses) + 1) (maximum addresses)
+    readArray (genLcp sa) (indexOfLengthOfLCE)
 
 -- This performs the DC3 Algorithm
 strToSuffixArray :: [StrChar] -> Int -> Int -> Int -> IO [Index]
@@ -509,17 +549,6 @@ thirdPassHelper p c bwt eof i j decodedStr
         let i' = p_i + c_at_l_i
         thirdPassHelper p c bwt eof i' (j - 1) decodedStr'
 
--- Longest common extension. Array of indices must match number of strings in GeneralizedSuffixArray
-lce :: GeneralizedSuffixArray -> [Index] -> IO Int
-lce sa indices = do
-    if length indices /= numInputStrs sa 
-        then error "SuffixArray.LCE: ust provide same number of indices as there are in the GeneralizedSuffixArray"
-        else return ()
-    let outOfBounds = checkBounds sa indices
-    if outOfBounds then error "SuffixArray.LCE: Input indices out of bounds" else return ()
-    addresses <- mapM (strIndexToSAIndex sa) (zip [0..] indices)
-    indexOfLengthOfLCE <- (genLcpRMQ sa) ((minimum addresses) + 1) (maximum addresses)
-    readArray (genLcp sa) (indexOfLengthOfLCE)
 
 checkBounds :: GeneralizedSuffixArray -> [Int] -> Bool
 checkBounds sa indices = elem False trueFalseArr 
