@@ -5,6 +5,7 @@ import FischerHeun
 --import Data.HashTable as HT
 import Control.Applicative
 import Data.Array.IO
+import Data.List
 
 type Length = Int
 type StrNum = Index
@@ -415,7 +416,7 @@ fillBucketsHelper tokens tokenSize buckets numEOFs rnd maybePartiallySortedIndic
                             Just partiallySortedIndices -> (head partiallySortedIndices, Just $ tail partiallySortedIndices)
         let chIndex = tokenIndex * tokenSize + rnd
         ch <- readArray tokens chIndex
-        let strChrIndexValue = toIndex ch numEOFs
+        let strChrIndexValue = strCharToIndex ch numEOFs
         bucketContents <- readArray buckets strChrIndexValue
         writeArray buckets strChrIndexValue (tokenIndex:bucketContents)
         fillBucketsHelper tokens tokenSize buckets numEOFs rnd maybePartiallySortedIndices' (i + 1) bound
@@ -431,14 +432,15 @@ emptyBucketsHelper buckets i bound
         rest <- emptyBucketsHelper buckets (i + 1) bound
         return $ (reverse bucketContents) ++ rest
 
-toIndex :: StrChar -> Int -> Index
-toIndex strChar numEOFs = 
+strCharToIndex :: StrChar -> Int -> Index
+strCharToIndex strChar numEOFs = 
     case strChar of
         PseudoEOF i -> i
         ActualChar ch -> numEOFs + (fromEnum ch)
 
-
-
+charToIndex :: Char -> Char -> Index
+charToIndex ch eof = 
+    if ch == eof then 0 else (fromEnum ch) + 1
 
 mapT0ToMaster :: [Index] -> [Index]
 mapT0ToMaster sortedIndices = map t0IndexToMasterIndex sortedIndices
@@ -624,7 +626,6 @@ toBurrowsWheeler str eof = do
     let str' = appendEOF str 0
     let strLen = length str'
     sa <- strToSuffixArray str' strLen initialAlphabetSize 1
-    putStrLn $ show sa
     ioStr <- newListArray (0, strLen - 1) str'
     suffixArrayToBurrowsWheeler sa ioStr eof
 
@@ -644,8 +645,63 @@ suffixArrayToBurrowsWheeler sa ioStr eof = do
 
 -- Takes a string and a user provided eof character that doesn't appear anywhere in the string
 fromBurrowsWheeler :: String -> Char -> IO String
-fromBurrowsWheeler _ _ = undefined
---fromBurrowsWheeler str eof = undefined
+fromBurrowsWheeler bwt eof = do
+    let bwtLen = length bwt
+    (p, c) <- firstPass bwt bwtLen (initialAlphabetSize + 1) eof
+    pList <- getElems p
+    cList <- getElems c
+    secondPass c (initialAlphabetSize + 1)
+    s <- thirdPass p c bwt bwtLen eof
+    return $ init s
+
+firstPass :: String -> Int -> Int -> Char -> IO (IOArray Index Index, IOArray Index Index)
+firstPass bwt bwtLen alphabetSize eof = do
+    p <- newArray_ (0, bwtLen - 1) 
+    c <- newArray (0, alphabetSize - 1) 0
+    firstPassHelper bwt p c 0 bwtLen eof
+
+firstPassHelper :: String -> IOArray Index Index -> IOArray Index Index -> Index -> Index -> Char -> IO (IOArray Index Index, IOArray Index Index)
+firstPassHelper bwt p c i n eof
+    | i == n = return (p, c)
+    | otherwise = do
+        let l_i_ch = head bwt
+        let l_i = charToIndex l_i_ch eof
+        c_at_l_i <- readArray c l_i
+        writeArray p i c_at_l_i
+        writeArray c l_i (c_at_l_i + 1)
+        firstPassHelper (tail bwt) p c (i + 1) n eof
+
+secondPass :: IOArray Index Index -> Int -> IO ()
+secondPass c alphabetSize = secondPassHelper c alphabetSize 0 0
+
+secondPassHelper :: IOArray Index Index -> Int -> Int -> Index -> IO ()
+secondPassHelper c alphabetSize curSum curCh 
+    | curCh == alphabetSize = return ()
+    | otherwise = do
+        c_ch <- readArray c curCh
+        let curSum' = curSum + c_ch
+        writeArray c curCh (curSum' - c_ch)
+        secondPassHelper c alphabetSize curSum' (curCh + 1)
+
+thirdPass :: IOArray Index Index -> IOArray Index Index -> String -> Int -> Char -> IO String
+thirdPass p c bwt bwtLen eof = do
+    let eofIndex = case (elemIndex eof bwt) of
+                        Nothing -> error "ERROR: BWT must contain EOF"
+                        Just i -> i
+    ioBWT <- newListArray (0, (length bwt) - 1) bwt
+    thirdPassHelper p c ioBWT eof eofIndex (bwtLen - 1) "" 
+
+thirdPassHelper :: IOArray Index Index -> IOArray Index Index -> IOArray Index Char -> Char -> Index -> Index -> String -> IO String
+thirdPassHelper p c bwt eof i j decodedStr 
+    | j < 0 = return decodedStr
+    | otherwise = do
+        l_i_ch <- readArray bwt i
+        let decodedStr' = l_i_ch:decodedStr
+        let l_i = charToIndex l_i_ch eof
+        c_at_l_i <- readArray c l_i
+        p_i <- readArray p i
+        let i' = p_i + c_at_l_i
+        thirdPassHelper p c bwt eof i' (j - 1) decodedStr'
 
 -- Longest common extension. Array of indices must match number of strings in GeneralizedSuffixArray
 lce :: GeneralizedSuffixArray -> [Index] -> IO Int
