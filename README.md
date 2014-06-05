@@ -5,45 +5,57 @@ API
 ---
 
 SparseTable.hs:
-<code>
+
     -- Returns function that can be used to find RMQ over two indices on the array.
     --         Calls to sparseTableRMQ run in O(nlog(n)) time with O(1) time queries
     --         to the ouput function.
+
+<code>
     type SparseTable = Index -> Index -> IO Index
     sparseTableRMQ :: [Int] -> IO SparseTable
 </code>
 
 FisherHeun.hs:
-<code>
+
     -- Returns function that can be used to find RMQ over two indices on the array.
     --         Calls to fischerHeunRMQ run in O(n) time with O(1) time queries
     --         to the ouput function.
+<code>
     type FischerHeun = Index -> Index -> IO Index
     fischerHeunRMQ :: [Int] -> IO FischerHeun
 </code>
 
 SuffixArray.hs:
+
+    -- Functions to create SuffixArray types which can then be passed around
 <code>
-    -- Functions to create SuffixArray types which can then be passed around:
     createSuffixArray :: String -> IO SuffixArray
     createGeneralizedSuffixArray :: [String] -> IO GeneralizedSuffixArray
+</code>
 
     -- Returns a lexicographically ordered list of indices which each
     --        represent a suffix in the original input string.
+<code>
     getSuffixRankings :: SuffixArray -> [Int]
-    
+ </code>   
     -- Returns a lexicographically ordered list of (string number, index) 
     --        pairs which each represent a suffix in one of the original
     --  input strings.
+<code>
     getGeneralizedSuffixRankings :: GeneralizedSuffixArray -> [(Int, Int)]
+</code>
 
     -- Retrieve the original input string(s) from a suffix array.
+<code>
     getInputStr :: SuffixArray -> String
     getInputStrs :: GeneralizedSuffixArray -> [String]
-    
+</code>
+
     -- For demonstrative purposes.
+<code>
     printSuffixes :: SuffixArray -> IO ()
     printGeneralizedSuffixes :: GeneralizedSuffixArray -> IO ()
+</code>
 
     -- For Generalized suffix array with input strings S1 to Sn, accepts 
     --        an array of indices [i1, …, in] and returns the length of 
@@ -55,8 +67,9 @@ SuffixArray.hs:
     --            2
     --            ghci> lce gsa [2, 3]
     --            0
-    
+<code>    
     lce :: GeneralizedSuffixArray -> [Index] -> IO Int
+</code>
 
     -- Takes a string and an EOF character that doesn’t appear anywhere in the
     --       and returns the Burrows Wheeler transform on that string. To recover 
@@ -66,9 +79,9 @@ SuffixArray.hs:
     --            true!" '$'
     --            ghci> bwt
     --            "!!utrnsyeeu $h hdoruutT aTyyeattia   oorra  "
-
+<code>
     toBurrowsWheeler :: String -> Char -> IO String
-
+</code>
 
     -- Takes a string that has been transformed by toBurrowsWheeler and recovers the
     --       original string. Must use the same EOF character that was given to
@@ -77,5 +90,6 @@ SuffixArray.hs:
                   oorra  " '$'
     --            ghci> str
     --            "Today you are you! That is truer than true!"
+<code>
     fromBurrowsWheeler :: String -> Char -> IO String
 </code>
