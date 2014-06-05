@@ -41,6 +41,7 @@ data SuffixArray = SuffixArrayConstructor { inputStr :: [StrChar]
 data GeneralizedSuffixArray = GeneralizedSuffixArrayConstructor {  inputStrs :: [[StrChar]] 
                                                         , genOrderedSuffix :: GeneralizedSuffixRankings
                                                         , numInputStrs :: Int 
+                                                        , strLengths :: [Int]
                                                         , strIndexToSAIndex :: (StrNum, Index) -> IO Index 
                                                         , genLcp :: LCPInfo 
                                                         , genLcpRMQ :: FischerHeun  
@@ -87,6 +88,7 @@ createGeneralizedSuffixArray strs = do
     return $ GeneralizedSuffixArrayConstructor {  inputStrs = inputStrings 
                                                 , genOrderedSuffix = arr 
                                                 , numInputStrs = length inputStrings
+                                                , strLengths = map length inputStrings
                                                 , strIndexToSAIndex = strIndexToSuffixArrayIndex  
                                                 , genLcp = lCP 
                                                 , genLcpRMQ = lCPRMQ  
@@ -502,9 +504,16 @@ thirdPassHelper p c bwt eof i j decodedStr
 -- Longest common extension. Array of indices must match number of strings in GeneralizedSuffixArray
 lce :: GeneralizedSuffixArray -> [Index] -> IO Int
 lce sa indices = do
+    if length indices /= numInputStrs sa 
+        then error "SuffixArray.LCE: ust provide same number of indices as there are in the GeneralizedSuffixArray"
+        else return ()
+    let outOfBounds = checkBounds sa indices
+    if outOfBounds then error "SuffixArray.LCE: Input indices out of bounds" else return ()
     addresses <- mapM (strIndexToSAIndex sa) (zip [0..] indices)
-    genLcpList <- getElems $ genLcp sa
-    indexOfLengthOfLCE <- if length indices /= numInputStrs sa 
-                            then error "must provide same number of indices as there are in the GeneralizedSuffixArray" 
-                            else (genLcpRMQ sa) ((minimum addresses) + 1) (maximum addresses)
+    indexOfLengthOfLCE <- (genLcpRMQ sa) ((minimum addresses) + 1) (maximum addresses)
     readArray (genLcp sa) (indexOfLengthOfLCE)
+
+checkBounds :: GeneralizedSuffixArray -> [Int] -> Bool
+checkBounds sa indices = elem False trueFalseArr 
+    where
+        trueFalseArr = map (\(len, i) -> i >= 0 && i < len) (zip (strLengths sa) indices)
