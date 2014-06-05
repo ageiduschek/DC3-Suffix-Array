@@ -75,13 +75,13 @@ printStrCharString ((PseudoEOF _):strChar)  = printStrCharString strChar
 createGeneralizedSuffixArray :: [String] -> IO GeneralizedSuffixArray
 createGeneralizedSuffixArray strs = do
     let inputStrings = zipWith (appendEOF) strs [0..]
-    let (toIndividualStrAddr, toOverallAddr) = getToFromGeneralMaps inputStrings
+    (toIndividualStrAddr, toOverallAddr) <- getToFromGeneralMaps inputStrings
     let str' = (concat inputStrings)
     sa <- strToSuffixArray str' (length str') initialAlphabetSize (length inputStrings)
     let arr = map toIndividualStrAddr sa
 
-    let lCP = undefined --genLCPInfo arr inputStrings
-    lCPRMQ <- return undefined --fischerHeunRMQ lCP
+    lCP <- lCPInfo sa str' --genLCPInfo arr inputStrings
+    lCPRMQ <- fischerHeunRMQ lCP
     return $ GeneralizedSuffixArrayConstructor {  inputStrs = inputStrings 
                                                 , genOrderedSuffix = arr 
                                                 , numInputStrs = length inputStrings
@@ -339,14 +339,26 @@ appendEOF :: String -> Index -> [StrChar]
 appendEOF [] i = (PseudoEOF i):[]
 appendEOF (x:xs) i = (ActualChar x):(appendEOF xs i)
 
-getToFromGeneralMaps :: [[StrChar]] -> (Index -> (StrNum, Index), (StrNum, Index) -> Index)
-getToFromGeneralMaps strs = (toIndividualStrAddr, toOverallAddr)
+--getToFromGeneralMaps :: [[StrChar]] -> (Index -> (StrNum, Index), (StrNum, Index) -> Index)
+--getToFromGeneralMaps strs = (toIndividualStrAddr, toOverallAddr)
+--    where 
+--        strsWithIndices = zip [0..] strs --[(0, "foo$"), (1, "bar$"), (2, "a$")]
+--        strsOfIndices = map (\(i, str) -> replicate (length str) i) strsWithIndices -- [[0, 0, 0, 0], [1, 1, 1, 1], [2, 2]]
+--        individualStrAddresses = concat $ map (\x -> zip x [0..]) strsOfIndices -- [(0, 0), (0, 1), (0, 2), (0, 3), (1, 0), (1, 1), (1, 2), ...]
+--        toIndividualStrAddr i =  individualStrAddresses !! i
+--        toOverallAddr (strNum, i) = i + (map length strsOfIndices) !! strNum
+
+
+getToFromGeneralMaps :: [[StrChar]] -> IO (Index -> (StrNum, Index), (StrNum, Index) -> Index)
+getToFromGeneralMaps strs = do
+    return (toIndividualStrAddr, toOverallAddr)
     where 
         strsWithIndices = zip [0..] strs --[(0, "foo$"), (1, "bar$"), (2, "a$")]
         strsOfIndices = map (\(i, str) -> replicate (length str) i) strsWithIndices -- [[0, 0, 0, 0], [1, 1, 1, 1], [2, 2]]
         individualStrAddresses = concat $ map (\x -> zip x [0..]) strsOfIndices -- [(0, 0), (0, 1), (0, 2), (0, 3), (1, 0), (1, 1), (1, 2), ...]
         toIndividualStrAddr i =  individualStrAddresses !! i
-        toOverallAddr (strNum, i) = i + (map length strsOfIndices) !! strNum
+        cumSumOfLengths = 0 : (scanl1 (+) $ map length strsOfIndices)
+        toOverallAddr (strNum, i) = i + (cumSumOfLengths !! strNum)
 
 
 -- The following two functions will need to implement the algorithm in http://www.cs.iastate.edu/~cs548/references/linear_lcp.pdf
@@ -359,7 +371,6 @@ lCPInfo indices inputString = do
     inputStrArray <- newListArray (0, (length inputString) - 1) inputString
     height <- newArray (0, len - 1) 0
     loopOverRankArray pos rank height inputStrArray 0 (pred len) 0
-    heightList <- getElems height
     getElems height
 
 -- Helper for lCPInfo
@@ -394,10 +405,6 @@ loadRankArray pos rank i end
             val <- readArray pos i
             writeArray rank val i
             loadRankArray pos rank (i + 1) end
-
-genLCPInfo :: GeneralizedSuffixRankings -> [[StrChar]] -> LCPInfo
---genLCPInfo indices inputStrs = undefined
-genLCPInfo _ _ = undefined
 
 -- Takes a string and a user provided eof character that doesn't appear anywhere in the string
 toBurrowsWheeler :: String -> Char -> IO String
@@ -483,8 +490,9 @@ thirdPassHelper p c bwt eof i j decodedStr
 -- Longest common extension. Array of indices must match number of strings in GeneralizedSuffixArray
 lce :: GeneralizedSuffixArray -> [Index] -> IO Int
 lce sa indices = do
-    if length indices /= numInputStrs sa 
-                    then error "must provide same number of indices as there are in the GeneralizedSuffixArray" 
-                    else (genLcpRMQ sa) (minimum addresses) (maximum addresses)
+    indexOfLengthOfLCE <- if length indices /= numInputStrs sa 
+                            then error "must provide same number of indices as there are in the GeneralizedSuffixArray" 
+                            else (genLcpRMQ sa) (minimum addresses) (maximum addresses)
+    return $ (genLcp sa) !! (indexOfLengthOfLCE - 1)-- TODO CHANGE TO IOARRAY
     where 
         addresses = map (strIndexToOverallIndex sa) (zip [0..] indices)
