@@ -3,22 +3,27 @@ Stanford CS240H Final Project - Ben Isaacs and Anna Geiduschek
 
 API
 ---
-<code>
+
 SparseTable.hs:
+<code>
     -- Returns function that can be used to find RMQ over two indices on the array.
     --         Calls to sparseTableRMQ run in O(nlog(n)) time with O(1) time queries
     --         to the ouput function.
     type SparseTable = Index -> Index -> IO Index
     sparseTableRMQ :: [Int] -> IO SparseTable
+</code>
 
 FisherHeun.hs:
+<code>
     -- Returns function that can be used to find RMQ over two indices on the array.
     --         Calls to fischerHeunRMQ run in O(n) time with O(1) time queries
     --         to the ouput function.
     type FischerHeun = Index -> Index -> IO Index
     fischerHeunRMQ :: [Int] -> IO FischerHeun
+</code>
 
 SuffixArray.hs:
+<code>
     -- Functions to create SuffixArray types which can then be passed around:
     createSuffixArray :: String -> IO SuffixArray
     createGeneralizedSuffixArray :: [String] -> IO GeneralizedSuffixArray
