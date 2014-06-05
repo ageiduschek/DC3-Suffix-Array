@@ -5,6 +5,7 @@ import FischerHeun
 --import Data.HashTable as HT
 import Control.Applicative
 import Data.Array.IO
+import Data.List
 
 type Length = Int
 type StrNum = Index
@@ -93,53 +94,19 @@ createGeneralizedSuffixArray strs = do
 strToSuffixArray :: [StrChar] -> Int -> Int -> Int -> IO [Index]
 strToSuffixArray [_] _ _ _ = do return [0]
 strToSuffixArray str strlen alphabetSize numEOFs = do
-    --putStrLn $ "In strToSuffixArray. "
-    --putStrLn $ "str: " ++ (show str)
-    --putStrLn $ "strlen: " ++ (show strlen)
     t1t2Order <- getT1AndT2Ordering str strlen alphabetSize numEOFs
     unsortedRanks <- unsort t1t2Order strlen
     t0Order <- getT0Ordering str strlen alphabetSize numEOFs unsortedRanks
     mergeT0WithRest str strlen t0Order t1t2Order unsortedRanks
 
---strToSuffixArray str strlen alphabetSize numEOFs = return $ [8, 7, 4, 0, 5, 2, 1, 6, 3] -- Suffix array for "nonsense"
-
 getT1AndT2Ordering :: [StrChar] -> Int -> Int -> Int -> IO [Index]
 getT1AndT2Ordering str strlen alphabetSize numEOFs = do
-    --putStrLn $ "Entering call to getT1AndT2Ordering"
     let (doubledInput, doubledInputLen) = shiftAndDouble str strlen
-    --putStrLn $ "doubledInput = " ++ show doubledInput
-    --putStrLn $ "doubledInputLen = " ++ show doubledInputLen
     tokenOrderWithRepeats <- radixSort doubledInput 3 alphabetSize numEOFs
-    --putStrLn $ "tokenOrderWithRepeats = " ++ show tokenOrderWithRepeats
     (indicesWithRepeatsRemoved, newAlphabetSize) <- indicesWithoutRepeats doubledInput doubledInputLen tokenOrderWithRepeats
-    --putStrLn $ "indicesWithRepeatsRemoved = " ++ show indicesWithRepeatsRemoved
-    --putStrLn $ "newAlphabetSize = " ++ show newAlphabetSize
     tokensInNewAlphabet <- translateToNewAlphabet tokenOrderWithRepeats indicesWithRepeatsRemoved
-    --putStrLn $ "tokensInNewAlphabet = " ++ show tokensInNewAlphabet
     twoThirdsSuffixArray <- strToSuffixArray tokensInNewAlphabet (length tokensInNewAlphabet) newAlphabetSize newAlphabetSize
-    --putStrLn $ "Returned from recursive call"
     return $ mapDoubledArrayTokensToMaster twoThirdsSuffixArray
-
---getT1AndT2Ordering str strlen alphabetSize numEOFs = return $ [8, 7, 4, 5, 2, 1]
-
-{-
-    private int[] getT1AndT2Ordering(int[] input, int alphabetSize){
-        int [] doubledInput = shiftAndDouble(input);
-
-        int [] tokenOrderWithRepeats = radixSort(doubledInput, 3, alphabetSize);
-        int [] indicesWithRepeatsRemoved = indicesWithoutRepeats(doubledInput, tokenOrderWithRepeats);
-        
-        int [] tokenOrder = new int[tokenOrderWithRepeats.length];
-        for(int i = 0; i < tokenOrderWithRepeats.length; i++) {
-            tokenOrder[tokenOrderWithRepeats[i]] = indicesWithRepeatsRemoved[i];
-        }
-
-        int newAlphabetSize = indicesWithRepeatsRemoved[indicesWithRepeatsRemoved.length -1] + 1;
-        int [] twoThirdsSuffixArray = buildSuffixArray(tokenOrder, newAlphabetSize);
-
-        return mapDoubledArrayTokensToMaster(twoThirdsSuffixArray);
-    }
--}
 
 shiftAndDouble :: [StrChar] -> Int -> ([StrChar], Int)
 shiftAndDouble input len = (shiftedAndDoubledStr, newStringLen)
@@ -151,22 +118,6 @@ shiftAndDouble input len = (shiftedAndDoubledStr, newStringLen)
         (firstPadsArr, secondPadsArr) = (replicate firstHalfPads (PseudoEOF 0),  replicate secondHalfPads (PseudoEOF 0))
         shiftedAndDoubledStr = shiftedOnce ++ (firstPadsArr ++ (shiftedTwice ++ secondPadsArr))
         newStringLen = (2 * len) - 3 + firstHalfPads + secondHalfPads
-
-    --private int[] shiftAndDouble(int [] input) {
-    --    int totalPads = input.length % 3 == 0 ? 3 : input.length % 3;
-    --    int [] doubledInput = new int[input.length * 2 + totalPads - 3];
-
-    --    int i = 1, j = 2;
-
-    --    for(; i < input.length; i++) doubledInput[i - 1] = input[i]; //Add string with first char removed
-    --    for(;(i - 1)%3 != 0; i++) doubledInput[i - 1] = 0; //Pad with EOF
-
-    --    for(; j < input.length; j++) doubledInput[i + j - 3] = input[j]; //Add string with first two chars removed
-    --    for(;(j - 2)%3 != 0; j++) doubledInput[i + j - 3] = 0; //Pad with EOF
-
-    --    return doubledInput;
-    --}
-
 
 indicesWithoutRepeats :: [StrChar] -> Int -> [Index] -> IO ([Index], Int)
 indicesWithoutRepeats doubledInput doubledInputLen tokenOrderWithRepeats = do
@@ -199,37 +150,6 @@ strToDC3Tokens str = token:(strToDC3Tokens rest)
     where
         (token, rest) = splitAt 3 str
 
-    --private int [] indicesWithoutRepeats(int [] doubledInput, int [] tokenOrderWithRepeats) {
-    --    int [] result = new int [tokenOrderWithRepeats.length]; //init to 0 or put a 0 in the first spot
-    --    int rank = 0;
-    --    for(int i = 1; i < tokenOrderWithRepeats.length; i++) {
-    --        if(!dc3TokenCompare(doubledInput, tokenOrderWithRepeats[i-1], tokenOrderWithRepeats[i])) {
-    --            rank++;
-    --        }
-    --        result[i] = rank;
-    --    }
-
-    --    return result;
-    --}
-
-    --int newAlphabetSize = indicesWithRepeatsRemoved[indicesWithRepeatsRemoved.length -1] + 1;
-
-
-    --private boolean dc3TokenCompare(int [] doubledInput, int t1, int t2) {
-    --    for(int i=0; i < 3; i++) {
-    --        int ch1 = doubledInput[t1 * 3 + i];
-    --        int ch2 = doubledInput[t2 * 3 + i];
-    --        if(ch1 != ch2) return false;
-    --    }
-    --    return true;
-    --}
-
-
-
-
-
-
-
 translateToNewAlphabet :: [Index] -> [Index] -> IO [StrChar]
 translateToNewAlphabet tokenOrderWithRepeats indicesWithRepeatsRemoved = do
     tokenOrder <- newArray_ (0, (length tokenOrderWithRepeats) - 1)
@@ -246,11 +166,6 @@ translateToNewAlphabetHelper tokenOrder tokenOrderWithRepeats indicesWithRepeats
     writeArray tokenOrder (head tokenOrderWithRepeats) (head indicesWithRepeatsRemoved)
     translateToNewAlphabetHelper tokenOrder (tail tokenOrderWithRepeats) (tail indicesWithRepeatsRemoved)
 
-    --int [] tokenOrder = new int[tokenOrderWithRepeats.length];
-    --for(int i = 0; i < tokenOrderWithRepeats.length; i++) {
-    --    tokenOrder[tokenOrderWithRepeats[i]] = indicesWithRepeatsRemoved[i];
-    --}
-
 mapDoubledArrayTokensToMaster :: [Index] -> [Index]
 mapDoubledArrayTokensToMaster tokenIndices = map (doubledArrayTokenIndicesToMaster $ length tokenIndices) tokenIndices
 
@@ -263,21 +178,6 @@ doubledArrayTokenIndicesToMaster tokenIndicesLength i = t1T2IndexToMasterIndex u
 
 t1T2IndexToMasterIndex :: Index -> Index
 t1T2IndexToMasterIndex t1T2Index = (t1T2Index `quot` 2)*3 + (t1T2Index `mod` 2) + 1
---private int [] mapDoubledArrayTokensToMaster(int [] tokenIndices) {
---    int [] masterIndices = new int[tokenIndices.length];
---    for(int i=0; i < tokenIndices.length; i++) {
---        int shift = tokenIndices[i] < (tokenIndices.length + 1)/2 ? 0 : tokenIndices.length - 1  + (tokenIndices.length % 2);
---        int unshuffledIndex = tokenIndices[i] * 2 - shift;
---        masterIndices[i] = t1T2IndexToMasterIndex(unshuffledIndex);
---    }
---    return masterIndices;
---}
-
-    --private int t1T2IndexToMasterIndex(int t1T2Index) {
-    --    return (t1T2Index/2)*3 + (t1T2Index%2) + 1;
-    --}
-
-
 
 
 unsort :: [Index] -> Int -> IO [Index]
@@ -286,45 +186,17 @@ unsort sortedIndices mappingSpace = do
     unsortHelper result sortedIndices 0
     getElems result
 
-
 unsortHelper :: IOArray Index Index -> [Index] -> Int -> IO ()
 unsortHelper _ [] _ = return ()
 unsortHelper result (x:xs) i = do
-    writeArray result x i -- result[x] = i
+    writeArray result x i 
     unsortHelper result xs (i + 1)
-
-{-
-    private int[] unsort(int [] sortedIndices, int mappingSpace) {
-        int [] result = new int[mappingSpace];
-        for(int i=0; i < sortedIndices.length; i++) {
-            result[sortedIndices[i]] = i;
-        }
-        return result;
-    }
--}
-
 
 getT0Ordering :: [StrChar] -> Int -> Int -> Int -> [Index] ->  IO [Index]
 getT0Ordering str strlen alphabetSize numEOFs unsortedRanks = do
     let tokens = getT0Tokens str strlen unsortedRanks -- tokens is int []
     mapT0ToMaster <$> (radixSort tokens 2 (max alphabetSize strlen) numEOFs)
 
---getT0Ordering str strlen alphabetSize numEOFs unsortedRanks = return $ [0, 6, 3]
-
-{-
-    private int[] getT0Ordering(int[] input, int [] t1t2Order, int [] unsortedRanks, int alphabetSize){        
-        int [] tokens = getT0Tokens(input, unsortedRanks);
-    
-        int[] sortedIndices = radixSort(tokens, 2, Math.max(alphabetSize, input.length));
-        int [] master = mapT0ToMaster(sortedIndices);
-        return mapT0ToMaster(sortedIndices);
-    }
--}
-
---testGetT0Tokens :: IO()
---testGetT0Tokens = do
---    let str' = appendEOF "aaaa" 0
---    putStrLn $ show $ getT0Tokens str' (length str') [0, 2, 1, 0, 0]
 
 getT0Tokens :: [StrChar] -> Int -> [Index] -> [StrChar]
 getT0Tokens str strlen unsortedRanks = getT0TokensHelper revStr revStrLen revUnsortedRanks []
@@ -347,28 +219,8 @@ getT0TokensHelper revStr revStrLen revUnsortedRanks tokens =
         dropUpTo3 = drop numToDrop
         (revStr', revUnsortedRanks') = (dropUpTo3 revStr, dropUpTo3 revUnsortedRanks)
 
-{-
-    private int [] getT0Tokens(int[] input, int[] unsortedRanks) {
-        int numTokens = input.length/3 + (input.length %3 == 0 ? 0 : 1);
-        int [] tokens = new int [numTokens * 2];
-        for(int tokenNum = 0; tokenNum < numTokens; tokenNum++) {
-            int index = tokenNum * 3;
-            int ch = input[index];
-            tokens[tokenNum * 2] = ch;
-            tokens[tokenNum * 2 + 1] = (index + 1) == input.length? -1 : unsortedRanks[index + 1];
-        }
-
-        return tokens;
-    }
--}
-
---numT0Tokens :: Int -> Int
---numT0Tokens inputLen = (quot inputLen 3) + (if inputLen `mod` 3 == 0 then 0 else 1)
-
 radixSort :: [StrChar] -> Int -> Int -> Int -> IO [Index]
 radixSort tokens tokenSize alphabetSize numEOFs = do
-    --putStrLn $ "Entering radixSort"
-    --putStrLn $ "tokens: " ++ (show tokens)
     let tokensLen = length tokens
     ioTokens <- newListArray (0, tokensLen - 1)tokens
     radixSortHelper ioTokens tokenSize tokensLen alphabetSize numEOFs (tokenSize - 1) Nothing
@@ -382,38 +234,10 @@ radixSortHelper tokens tokenSize tokensLen alphabetSize numEOFs rnd maybePartial
                             Just x -> x
         return $ sortedIndices
     | otherwise = do
-        --putStrLn $ "round " ++ (show rnd)
         buckets <- newArray (-1, numEOFs + alphabetSize - 1) []
         fillBuckets tokens tokenSize tokensLen buckets numEOFs rnd maybePartiallySortedIndices
         sortedIndices <- emptyBuckets buckets alphabetSize numEOFs
         radixSortHelper tokens tokenSize tokensLen alphabetSize numEOFs (rnd - 1) (Just sortedIndices)
-
-
-{-
-    private int[] radixSort(int [] tokens, int tokenSize, int alphabetSize){
-
-        int [] sortedIndices = null;
-        for(int round = tokenSize - 1; round >= 0; round--) {
-            int [] partiallySortedIndices = sortedIndices;
-            sortedIndices = new int[tokens.length/tokenSize];
-            ArrayList<Queue<Integer>> buckets = initBuckets(alphabetSize + 1);
-            for(int i = 0; i < tokens.length/tokenSize; i++) {
-                int tokenIndex = partiallySortedIndices == null ? i : partiallySortedIndices[i];
-                int ch = tokens[tokenIndex * tokenSize + round];
-                buckets.get(ch + 1).add(tokenIndex);
-            }
-            int counter = 0;
-            for(int ch = 0; ch < alphabetSize + 1; ch++) {
-                while (!buckets.get(ch).isEmpty()) {
-                    sortedIndices[counter] = buckets.get(ch).poll();
-                    counter++;
-                }      
-            }
-
-        }
-        return sortedIndices;
-    }
--}
 
 fillBuckets :: IOArray Index StrChar -> Int -> Int -> IOArray Index [Index] -> Int -> Int -> Maybe [Index] -> IO ()
 fillBuckets tokens tokenSize tokensLen buckets numEOFs rnd maybePartiallySortedIndices = 
@@ -428,7 +252,7 @@ fillBucketsHelper tokens tokenSize buckets numEOFs rnd maybePartiallySortedIndic
                             Just partiallySortedIndices -> (head partiallySortedIndices, Just $ tail partiallySortedIndices)
         let chIndex = tokenIndex * tokenSize + rnd
         ch <- readArray tokens chIndex
-        let strChrIndexValue = toIndex ch numEOFs
+        let strChrIndexValue = strCharToIndex ch numEOFs
         bucketContents <- readArray buckets strChrIndexValue
         writeArray buckets strChrIndexValue (tokenIndex:bucketContents)
         fillBucketsHelper tokens tokenSize buckets numEOFs rnd maybePartiallySortedIndices' (i + 1) bound
@@ -444,14 +268,15 @@ emptyBucketsHelper buckets i bound
         rest <- emptyBucketsHelper buckets (i + 1) bound
         return $ (reverse bucketContents) ++ rest
 
-toIndex :: StrChar -> Int -> Index
-toIndex strChar numEOFs = 
+strCharToIndex :: StrChar -> Int -> Index
+strCharToIndex strChar numEOFs = 
     case strChar of
         PseudoEOF i -> i
         ActualChar ch -> numEOFs + (fromEnum ch)
 
-
-
+charToIndex :: Char -> Char -> Index
+charToIndex ch eof = 
+    if ch == eof then 0 else (fromEnum ch) + 1
 
 mapT0ToMaster :: [Index] -> [Index]
 mapT0ToMaster sortedIndices = map t0IndexToMasterIndex sortedIndices
@@ -460,20 +285,6 @@ mapT0ToMaster sortedIndices = map t0IndexToMasterIndex sortedIndices
 t0IndexToMasterIndex :: Index -> Index
 t0IndexToMasterIndex t0Index = t0Index * 3
 
-
-{-
-    private int [] mapT0ToMaster(int [] t0Indices) {
-        int [] masterIndices = new int[t0Indices.length];
-        for(int i=0; i < t0Indices.length; i++) {
-            masterIndices[i] = t0IndexToMasterIndex(t0Indices[i]);
-        }
-        return masterIndices;
-    }
-
-    private int t0IndexToMasterIndex(int t0Index) {
-        return t0Index*3;
-    }
--}
 
 mergeT0WithRest :: [StrChar] -> Int -> [Index] -> [Index] -> [Index] -> IO [Index]
 mergeT0WithRest str strLen t0Order t1t2Order unsortedRanks = do
@@ -503,46 +314,6 @@ mergeT0WithRestFinish [] _ _ = return ()
 mergeT0WithRestFinish rest suffixArrayResult i = do
     writeArray suffixArrayResult i (head rest)
     mergeT0WithRestFinish (tail rest) suffixArrayResult (i + 1) 
-
-{-
-    private int[] mergeT0WithRest(int[] input, int [] t0Order, int [] t1t2Order, int [] unsortedRanks) {
-        int [] suffixArray = new int[input.length];
-        int i = 0, j = 0;
-        while (i < t0Order.length && j < t1t2Order.length) {           
-            if(suffixCompare(i, j, input, t0Order, t1t2Order, unsortedRanks)) { //Returns true if i comes first
-                suffixArray[i + j] = t0Order[i];
-                i++;
-            } else {
-                suffixArray[i + j] = t1t2Order[j];
-                j++;
-            }
-        }
-        for(; i < t0Order.length; i++) suffixArray[i + j] = t0Order[i];
-        for(; j < t1t2Order.length; j++) suffixArray[i + j] = t1t2Order[j];
-
-        return suffixArray;
-    }
-
-    private boolean suffixCompare(int i, int j, int[] input, int [] t0Order, int [] t1t2Order, int [] unsortedRanks) {
-        int t0CharIndex = t0Order[i];
-        int t1t2CharIndex = t1t2Order[j];
-
-        while(true){
-            int t0Char = input[t0CharIndex];
-            int t1t2Char = input[t1t2CharIndex];
-
-            if (t0Char != t1t2Char) return t0Char < t1t2Char;
-
-
-            if((t0CharIndex + 1) % 3 != 0  && (t1t2CharIndex + 1) % 3 != 0) {
-                return unsortedRanks[t0CharIndex + 1] < unsortedRanks[t1t2CharIndex + 1];
-            }
-
-            t0CharIndex++;
-            t1t2CharIndex++;
-        }
-    }
--}
 
 suffixCompare :: IOArray Index StrChar -> IOArray Index Index -> [Index] -> [Index] -> IO Bool
 suffixCompare input unsortedRanks t0Order t1t2Order = do
@@ -634,7 +405,6 @@ toBurrowsWheeler str eof = do
     let str' = appendEOF str 0
     let strLen = length str'
     sa <- strToSuffixArray str' strLen initialAlphabetSize 1
-    putStrLn $ show sa
     ioStr <- newListArray (0, strLen - 1) str'
     suffixArrayToBurrowsWheeler sa ioStr eof
 
@@ -654,8 +424,61 @@ suffixArrayToBurrowsWheeler sa ioStr eof = do
 
 -- Takes a string and a user provided eof character that doesn't appear anywhere in the string
 fromBurrowsWheeler :: String -> Char -> IO String
-fromBurrowsWheeler _ _ = undefined
---fromBurrowsWheeler str eof = undefined
+fromBurrowsWheeler bwt eof = do
+    let bwtLen = length bwt
+    (p, c) <- firstPass bwt bwtLen (initialAlphabetSize + 1) eof
+    secondPass c (initialAlphabetSize + 1)
+    s <- thirdPass p c bwt bwtLen eof
+    return $ init s
+
+firstPass :: String -> Int -> Int -> Char -> IO (IOArray Index Index, IOArray Index Index)
+firstPass bwt bwtLen alphabetSize eof = do
+    p <- newArray_ (0, bwtLen - 1) 
+    c <- newArray (0, alphabetSize - 1) 0
+    firstPassHelper bwt p c 0 bwtLen eof
+
+firstPassHelper :: String -> IOArray Index Index -> IOArray Index Index -> Index -> Index -> Char -> IO (IOArray Index Index, IOArray Index Index)
+firstPassHelper bwt p c i n eof
+    | i == n = return (p, c)
+    | otherwise = do
+        let l_i_ch = head bwt
+        let l_i = charToIndex l_i_ch eof
+        c_at_l_i <- readArray c l_i
+        writeArray p i c_at_l_i
+        writeArray c l_i (c_at_l_i + 1)
+        firstPassHelper (tail bwt) p c (i + 1) n eof
+
+secondPass :: IOArray Index Index -> Int -> IO ()
+secondPass c alphabetSize = secondPassHelper c alphabetSize 0 0
+
+secondPassHelper :: IOArray Index Index -> Int -> Int -> Index -> IO ()
+secondPassHelper c alphabetSize curSum curCh 
+    | curCh == alphabetSize = return ()
+    | otherwise = do
+        c_ch <- readArray c curCh
+        let curSum' = curSum + c_ch
+        writeArray c curCh (curSum' - c_ch)
+        secondPassHelper c alphabetSize curSum' (curCh + 1)
+
+thirdPass :: IOArray Index Index -> IOArray Index Index -> String -> Int -> Char -> IO String
+thirdPass p c bwt bwtLen eof = do
+    let eofIndex = case (elemIndex eof bwt) of
+                        Nothing -> error "ERROR: BWT must contain EOF"
+                        Just i -> i
+    ioBWT <- newListArray (0, (length bwt) - 1) bwt
+    thirdPassHelper p c ioBWT eof eofIndex (bwtLen - 1) "" 
+
+thirdPassHelper :: IOArray Index Index -> IOArray Index Index -> IOArray Index Char -> Char -> Index -> Index -> String -> IO String
+thirdPassHelper p c bwt eof i j decodedStr 
+    | j < 0 = return decodedStr
+    | otherwise = do
+        l_i_ch <- readArray bwt i
+        let decodedStr' = l_i_ch:decodedStr
+        let l_i = charToIndex l_i_ch eof
+        c_at_l_i <- readArray c l_i
+        p_i <- readArray p i
+        let i' = p_i + c_at_l_i
+        thirdPassHelper p c bwt eof i' (j - 1) decodedStr'
 
 -- Longest common extension. Array of indices must match number of strings in GeneralizedSuffixArray
 lce :: GeneralizedSuffixArray -> [Index] -> IO Int
