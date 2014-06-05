@@ -69,7 +69,7 @@ createOrAssignBlockSummaries a aLength blockMinVals blockSTs blockSigs bSize i b
             case maybeST of
                 Nothing -> error "foobarsdfsdfsdf"
                 Just myST -> do
-                    blockMinIndex <- myST 0 (bSize - 1)
+                    blockMinIndex <- myST 0 (blockEndIndex - 1)
                     writeArray blockMinVals i $ a !! blockMinIndex
                     let a' = drop blockEndIndex a 
                     createOrAssignBlockSummaries a' (aLength - blockEndIndex) blockMinVals blockSTs blockSigs bSize (i + 1) bound

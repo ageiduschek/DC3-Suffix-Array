@@ -56,6 +56,19 @@ createSuffixArray str = do
     lCPRMQ <- fischerHeunRMQ lCP
     return $ SuffixArrayConstructor {inputStr = str', orderedSuffixes = sa, lcp = lCP, lcpRMQ = lCPRMQ}
 
+printSuffixes :: SuffixArray -> IO ()
+printSuffixes (SuffixArrayConstructor _ [] _ _) = return ()
+printSuffixes (SuffixArrayConstructor str (i:os) x y) = do
+    printStrCharString (drop i str)
+    printSuffixes (SuffixArrayConstructor str os x y)
+
+printStrCharString :: [StrChar] -> IO ()
+printStrCharString []                       = putStrLn ""
+printStrCharString ((ActualChar x):strChar) = do
+    putStr (x:"")
+    printStrCharString strChar
+printStrCharString ((PseudoEOF _):strChar)  = printStrCharString strChar
+
 
 -- Creates a generalized suffix array out of a list of strings
 createGeneralizedSuffixArray :: [String] -> IO GeneralizedSuffixArray
@@ -572,13 +585,10 @@ lCPInfo indices inputString = do
     pos <- newListArray (0, len - 1) indices
     rank <- newArray_ (0, len - 1)
     loadRankArray pos rank 0 len
-    rankList <- getElems rank --TODO: DELETE
-    putStrLn $ "rankList" ++ (show rankList)
     inputStrArray <- newListArray (0, (length inputString) - 1) inputString
-    height <- newArray_ (0, len - 1)
-    loopOverRankArray pos rank height inputStrArray 0 len 0
+    height <- newArray (0, len - 1) 0
+    loopOverRankArray pos rank height inputStrArray 0 (pred len) 0
     heightList <- getElems height
-    putStrLn $ "heightList" ++ (show heightList)
     getElems height
 
 -- Helper for lCPInfo
