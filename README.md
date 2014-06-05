@@ -9,8 +9,6 @@ SparseTable.hs:
     -- Returns function that can be used to find RMQ over two indices on the array.
     --         Calls to sparseTableRMQ run in O(nlog(n)) time with O(1) time queries
     --         to the ouput function.
-
-
     type SparseTable = Index -> Index -> IO Index
     sparseTableRMQ :: [Int] -> IO SparseTable
 
@@ -20,8 +18,6 @@ FisherHeun.hs:
     -- Returns function that can be used to find RMQ over two indices on the array.
     --         Calls to fischerHeunRMQ run in O(n) time with O(1) time queries
     --         to the ouput function.
-
-
     type FischerHeun = Index -> Index -> IO Index
     fischerHeunRMQ :: [Int] -> IO FischerHeun
 
@@ -29,30 +25,22 @@ FisherHeun.hs:
 SuffixArray.hs:
 
     -- Functions to create SuffixArray types which can then be passed around
-
-
     createSuffixArray :: String -> IO SuffixArray
     createGeneralizedSuffixArray :: [String] -> IO GeneralizedSuffixArray
 
 
     -- Returns a lexicographically ordered list of indices which each
     --        represent a suffix in the original input string.
-
-
     getSuffixRankings :: SuffixArray -> [Int]
 
 
     -- Returns a lexicographically ordered list of (string number, index) 
     --        pairs which each represent a suffix in one of the original
     --  input strings.
-
-
     getGeneralizedSuffixRankings :: GeneralizedSuffixArray -> [(Int, Int)]
 
 
     -- Retrieve the original input string(s) from a suffix array.
-
-
     getInputStr :: SuffixArray -> String
     getInputStrs :: GeneralizedSuffixArray -> [String]
 
